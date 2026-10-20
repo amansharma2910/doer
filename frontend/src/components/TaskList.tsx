@@ -14,7 +14,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { asRuleError } from "./AddTask";
+import { asRuleError } from "../lib/api";
 import {
   formatMinutes,
   useCompleteTask,
@@ -25,6 +25,7 @@ import {
 import { PREFERENCE_LABELS, type Task } from "../lib/types";
 
 export function TaskList({ tasks }: { tasks: Task[] }) {
+  const demoted = tasks.filter((t) => t.carry_forward_demoted);
   const reorder = useReorderTask();
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -51,6 +52,7 @@ export function TaskList({ tasks }: { tasks: Task[] }) {
 
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+      {demoted.length > 0 && <DemotionNotice tasks={demoted} />}
       <div className="space-y-8">
         {[...byBlock.entries()].map(([kind, group]) => (
           <section key={kind}>
@@ -68,6 +70,28 @@ export function TaskList({ tasks }: { tasks: Task[] }) {
         ))}
       </div>
     </DndContext>
+  );
+}
+
+/**
+ * Carry-forward precedence gives unfinished commitments the primary slots, which
+ * means something you planned in advance quietly lost one. Saying so is part of
+ * the contract: the plan requires the user be told which tasks were demoted.
+ */
+function DemotionNotice({ tasks }: { tasks: Task[] }) {
+  return (
+    <p className="mb-6 text-xs leading-relaxed text-[var(--color-muted)]">
+      {tasks.length === 1 ? (
+        <>
+          <span className="text-[var(--color-ink)]">{tasks[0].title}</span> moved out
+          of your four
+        </>
+      ) : (
+        <>{tasks.length} tasks moved out of your four</>
+      )}{" "}
+      to make room for what carried over. Promote {tasks.length === 1 ? "it" : "them"}{" "}
+      back if you would rather drop something else.
+    </p>
   );
 }
 

@@ -183,7 +183,7 @@ class TestAggregates:
 
 class TestReplay:
     async def test_the_log_reproduces_the_stored_verdict(self, session, user_with_focus, day):
-        """T-EVT-04. If these disagree, the stored verdict is the wrong one."""
+        """T-EVT-04 and T-SCORE-08. If these disagree, the stored verdict is wrong."""
         for i in range(4):
             t = await task_service.create_task(
                 session, user_with_focus, day, title=f"p{i}", is_primary=True
@@ -212,6 +212,36 @@ class TestReplay:
 
         replayed = await metrics.verdict_from_events(session, user_with_focus, ANCHOR)
         assert replayed == closed.verdict == "failure"
+
+
+class TestReplayEdgeCases:
+    async def test_a_day_with_only_non_primary_tasks_replays_as_neutral(
+        self, session, user_with_focus, day
+    ):
+        """T-SCORE-08 edge case. Without total_task_count on day_scored, a replay
+        cannot tell "nothing scheduled" from "nothing committed to", and returns
+        unscheduled where the stored verdict says neutral."""
+        for i in range(3):
+            await task_service.create_task(
+                session, user_with_focus, day, title=f"n{i}", is_primary=False
+            )
+        await session.commit()
+
+        closed = await close_service.close_day(session, user_with_focus, ANCHOR)
+        await session.commit()
+
+        assert closed.verdict == "neutral"
+        assert await metrics.verdict_from_events(session, user_with_focus, ANCHOR) == "neutral"
+
+    async def test_an_empty_day_replays_as_unscheduled(self, session, user_with_focus, day):
+        closed = await close_service.close_day(session, user_with_focus, ANCHOR)
+        await session.commit()
+
+        assert closed.verdict == "unscheduled"
+        assert (
+            await metrics.verdict_from_events(session, user_with_focus, ANCHOR)
+            == "unscheduled"
+        )
 
 
 class TestCost:

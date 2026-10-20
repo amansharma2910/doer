@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useHeatmap } from "../lib/hooks";
 import type { HeatmapCell } from "../lib/types";
 
-type View = "count" | "verdict";
+export type View = "count" | "verdict";
 const WEEKS = 26;
 
 /**
@@ -78,7 +78,7 @@ function Cell({
   );
 }
 
-function colorFor(cell: HeatmapCell | undefined, view: View): string {
+export function colorFor(cell: HeatmapCell | undefined, view: View): string {
   if (!cell) return "transparent";
 
   // At-risk overrides both views. It is the one signal that is about the plan
@@ -149,7 +149,7 @@ function ViewButton({
   );
 }
 
-function buildRange(weeks: number) {
+export function buildRange(weeks: number) {
   const today = new Date();
   const end = new Date(today);
   // Pad to the end of the current week so the grid is rectangular.

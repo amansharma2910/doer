@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { ApiError } from "../lib/api";
+import { asRuleError } from "../lib/api";
 import { useCreateTask } from "../lib/hooks";
-import { PREFERENCE_LABELS, type PreferenceKind, type RuleError } from "../lib/types";
+import { PREFERENCE_LABELS, type PreferenceKind } from "../lib/types";
 
 export function AddTask({ primariesUsed }: { primariesUsed: number }) {
   const [open, setOpen] = useState(false);
@@ -104,14 +104,4 @@ export function AddTask({ primariesUsed }: { primariesUsed: number }) {
       </form>
     </div>
   );
-}
-
-/** The API attaches a remedy to contract refusals so the interface can offer a way forward. */
-export function asRuleError(error: unknown): RuleError | null {
-  if (!(error instanceof ApiError)) return null;
-  const { detail } = error;
-  if (typeof detail === "object" && detail !== null && "code" in detail) {
-    return detail as RuleError;
-  }
-  return { message: error.message, code: "unknown", remedy: null };
 }

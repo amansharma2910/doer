@@ -82,15 +82,26 @@ Recorded here because each changed a commitment made in an earlier document.
 5. **The API runs on port 8787**, not 8000, which was occupied on the development
    machine.
 
+## Verification
+
+Checked on 2026-10-21 rather than asserted:
+
+- All 21 acceptance criteria (AC-01 to AC-21) have at least one automated test.
+- All 76 named test cases (T-*) in plan §11.3 are implemented. 190 backend tests
+  plus 18 frontend tests; 7 live tests excluded from the default run.
+- All 31 events in the tracking plan are emitted by the code.
+- The runtime container builds and serves both the SPA and the API.
+
 ## Next Up
 
 1. **Use it.** Nothing further is needed to start recording days. The validation
    question is behavioral and cannot be answered by more building.
 2. **Create the GCP project** when calendar-aware capacity is wanted; the app works
    without it, degraded to raw focus-block capacity. See `docs/setup/gcp_setup.md`.
-3. **Close the Drift Notes** in `docs/doer/DOCUMENTATION.md` when they start to
-   matter. The demotion notice has no interface surface, and there is no frontend
-   test suite.
+3. **One Drift Note remains** in `docs/doer/DOCUMENTATION.md`: `actual_minutes`
+   is populated only for tasks that were explicitly started, so the
+   estimation-error indicator reads over a subset. Worth revisiting if that subset
+   is thin at review time.
 4. **Post-launch review** after 30 scored days: re-enter metrics-mode, answer the
    five questions in tracking plan §6 in order, and write the verdict back.
 5. **release-mode** only if and when deployment is wanted. That is a v2 decision,

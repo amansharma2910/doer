@@ -1,3 +1,5 @@
+import type { RuleError } from "./types";
+
 const BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8787";
 
 export class ApiError extends Error {
@@ -41,3 +43,17 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const loginUrl = `${BASE}/auth/google/login`;
+
+/**
+ * Contract refusals (the 4-primary cap, completed-task immutability, acting on a
+ * closed day) send a structured body carrying a remedy, so the interface can offer
+ * a way forward instead of a dead end. Everything else is a plain string.
+ */
+export function asRuleError(error: unknown): RuleError | null {
+  if (!(error instanceof ApiError)) return null;
+  const { detail } = error;
+  if (typeof detail === "object" && detail !== null && "code" in detail) {
+    return detail as RuleError;
+  }
+  return { message: error.message, code: "unknown", remedy: null };
+}

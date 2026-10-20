@@ -4,23 +4,16 @@ Last updated 2026-10-21, after milestones M1 to M7.
 
 ## Drift Notes
 
-Known gaps between what the documents promise and what the code does. Each is a
-deliberate carry, not an oversight.
+Known gaps between what the documents promise and what the code does.
 
-1. **Carry-forward demotions are recorded but not surfaced.** When carry-forward
-   precedence takes a task's primary slot, `tasks.carry_forward_demoted` is set
-   and a `task_demoted` event is written, and the flag is returned in `TaskOut`.
-   No frontend element renders it yet, so the plan's "the user is told which tasks
-   were demoted" is only half true.
-2. **There is no frontend test suite.** The plan's T-HEAT group (heatmap colour
-   rules) and the drag-reorder persistence check have no automated coverage.
-   Backend behaviour behind them is tested; the rendering is not.
-3. **Migrations do not run automatically.** Neither the Dockerfile nor compose
-   runs Alembic. `docker compose exec api alembic upgrade head` is a manual first
-   step, documented in the README and the manual QA guide.
-4. **`actual_minutes` is populated only for started tasks.** `POST /tasks/{id}/start`
-   exists but nothing requires it, so the estimation-error indicator is computed
-   over a subset that may stay small.
+1. **`actual_minutes` is populated only for tasks that were explicitly started.**
+   `POST /tasks/{id}/start` exists but nothing requires it, so the estimation-error
+   leading indicator is computed over a subset that may stay small. If that subset
+   is thin at review time, it is the first number to distrust.
+
+Closed on 2026-10-21: carry-forward demotions are now surfaced in the task list;
+a frontend test suite exists (Vitest, 18 tests covering the heatmap colour rules
+and contract-refusal decoding); and migrations run on container start.
 
 ## 1. Project Structure
 
@@ -135,8 +128,7 @@ together, because any task change can move capacity.
 cp .env.example .env            # fill in Google, Anthropic, and FERNET_KEY
 python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 
-docker compose up -d
-docker compose exec api alembic upgrade head    # not automatic, see Drift Note 3
+docker compose up -d        # migrations run on container start
 ```
 
 App at http://localhost:5173, API at http://localhost:8787. The API container
@@ -146,6 +138,9 @@ commonly occupied.
 Google OAuth needs the redirect URI `http://localhost:8787/auth/google/callback`
 and the JavaScript origin `http://localhost:5173` registered in the Cloud console.
 See `docs/setup/gcp_setup.md`; section 0 is the part that bites.
+
+A deployed environment should run migrations as a separate step rather than on
+start, where a failed migration must not take the service down with it.
 
 Database access goes through the container, because the host `psql` client is
 older than the Postgres 17 server:
@@ -159,8 +154,12 @@ docker compose exec db psql -U doer -d doer
 ```bash
 cd backend && uv sync --group dev
 createdb doer_test   # once, or: docker compose exec db createdb -U doer doer_test
-uv run pytest             # 178 tests, deterministic and offline
+uv run pytest             # 190 tests, deterministic and offline
 uv run pytest -m live     # 7 more that call the real model and cost money
+```
+
+```bash
+cd frontend && pnpm test  # 18 tests: heatmap colour rules, error decoding
 ```
 
 The suite runs on the host against the Postgres compose publishes on 5432, in its

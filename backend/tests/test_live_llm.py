@@ -39,8 +39,9 @@ class TestEstimationIsSane:
         assert MIN_ESTIMATE_MINUTES <= minutes <= MAX_ESTIMATE_MINUTES
 
     async def test_the_model_returns_bucket_values(self):
-        """Not load-bearing, since we snap anyway, but drift here means the prompt
-        has stopped landing."""
+        """T-EST-11."""
+        # Not load-bearing, since we snap anyway, but drift here means the
+        # prompt has stopped landing.
         minutes, _, _ = await estimation._call_model("review two pull requests", None, "deep_work")
         assert minutes % BUCKET_MINUTES == 0
 

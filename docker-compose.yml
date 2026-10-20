@@ -22,6 +22,12 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql+asyncpg://doer:doer@db:5432/doer
+    # Migrations run on start so `docker compose up` works from a fresh clone.
+    # A deployed environment should run them as a separate step instead, where a
+    # failed migration must not take the service down with it.
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn doer.main:app --host 0.0.0.0 --port 8000 --reload"
     ports:
       - "8787:8000"
     volumes:

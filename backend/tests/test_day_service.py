@@ -90,7 +90,10 @@ class TestConcurrency:
 
 class TestSnapshotImmutability:
     async def test_changing_the_day_shape_does_not_rewrite_an_open_day(self, session, user):
-        """T-DAY-04 / AC-13."""
+        """T-DAY-03 and T-DAY-04 / AC-13.
+
+        Covers both the snapshot taken at open and the refusal to recompute it.
+        """
         day = await day_service.open_day(session, user, ANCHOR)
         await session.commit()
         original = dict(day.shape_snapshot)
@@ -104,6 +107,23 @@ class TestSnapshotImmutability:
         assert day.shape_snapshot == original
         assert day.shape_snapshot["day_start_time"] == "14:00:00"
         assert float(day.capacity_ratio) == 0.5
+
+    async def test_a_closed_day_is_untouched_by_a_later_settings_edit(self, session, user):
+        """T-DAY-05. Closed days are history, not state."""
+        from doer.daytime import utcnow
+
+        day = await day_service.open_day(session, user, ANCHOR)
+        day.closed_at = utcnow()
+        day.verdict = "success"
+        await session.commit()
+        before = (dict(day.shape_snapshot), day.capacity_base_minutes, day.verdict)
+
+        user.day_start_time = time(7, 0)
+        user.capacity_ratio = 0.9
+        await session.commit()
+        await session.refresh(day)
+
+        assert (dict(day.shape_snapshot), day.capacity_base_minutes, day.verdict) == before
 
     async def test_the_new_shape_applies_to_the_next_day(self, session, user):
         await day_service.open_day(session, user, ANCHOR)

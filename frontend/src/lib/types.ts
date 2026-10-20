@@ -65,6 +65,7 @@ export type Task = {
   completed_at: string | null;
   actual_minutes: number | null;
   carry_forward_count: number;
+  carry_forward_demoted: boolean;
   is_complete: boolean;
 };
 

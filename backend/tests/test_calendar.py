@@ -169,7 +169,7 @@ class TestFreebusy:
 
 class TestDegradedModes:
     async def test_no_grant_at_all_leaves_the_app_usable(self, session, user_with_focus, day):
-        """AC-15. Capacity falls back to raw focus-block minutes."""
+        """T-CAP-10 / AC-15. Capacity falls back to raw focus-block minutes."""
         await calendar.sync_day(session, user_with_focus, day)
         await session.commit()
 
@@ -229,6 +229,63 @@ class TestDegradedModes:
         failure = await session.scalar(select(Event).where(Event.name == "calendar_query_failed"))
         assert failure is not None
         assert failure.properties["fell_back_to"] == "none"
+
+
+class TestTokenRefresh:
+    @respx.mock
+    async def test_an_expired_access_token_is_refreshed_and_persisted(
+        self, session, connected, day
+    ):
+        """T-AUTH-03. The refresh happens silently; the user never reconnects."""
+        token = await session.scalar(select(OAuthToken))
+        token.access_token_expires_at = datetime.now(UTC) - timedelta(hours=1)
+        await session.commit()
+        stale_ciphertext = token.access_token_encrypted
+
+        respx.post(TOKEN_ENDPOINT).mock(
+            return_value=httpx.Response(
+                200,
+                json={"access_token": "fresh-access", "expires_in": 3600, "scope": "x"},
+            )
+        )
+        respx.post(FREEBUSY_ENDPOINT).mock(
+            return_value=httpx.Response(200, json=busy_payload((at(16), at(17))))
+        )
+
+        await calendar.sync_day(session, connected, day)
+        await session.commit()
+        await session.refresh(token)
+
+        assert token.status == "active"
+        assert token.access_token_encrypted != stale_ciphertext
+        assert token.access_token_expires_at > datetime.now(UTC)
+        assert day.calendar_state == "connected"
+
+    @respx.mock
+    async def test_a_refresh_response_without_a_refresh_token_is_accepted(
+        self, session, connected, day
+    ):
+        """Google omits refresh_token on refresh. Treating that as a failure would
+        revoke a perfectly good grant on its first token expiry."""
+        token = await session.scalar(select(OAuthToken))
+        original_refresh = token.refresh_token_encrypted
+        token.access_token_expires_at = datetime.now(UTC) - timedelta(hours=1)
+        await session.commit()
+
+        respx.post(TOKEN_ENDPOINT).mock(
+            return_value=httpx.Response(
+                200, json={"access_token": "fresh", "expires_in": 3600}
+            )
+        )
+        respx.post(FREEBUSY_ENDPOINT).mock(
+            return_value=httpx.Response(200, json=busy_payload())
+        )
+        await calendar.sync_day(session, connected, day)
+        await session.commit()
+        await session.refresh(token)
+
+        assert token.status == "active"
+        assert token.refresh_token_encrypted == original_refresh
 
 
 class TestStaleness:

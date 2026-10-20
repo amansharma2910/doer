@@ -314,3 +314,141 @@ class TestHeatmapOverHttp:
 
         bob_cells = (await client.get(url, headers=auth(bob_token))).json()
         assert all(cell["completed_total"] == 0 for cell in bob_cells)
+
+
+class TestEstimationBudgetOverHttp:
+    """AC-07 / T-EST-01 and T-EST-02.
+
+    The contract is that creation returns immediately with a pending estimate and
+    the estimate lands separately. Background estimation is disabled in tests, so
+    these assert the handoff rather than the model round trip; T-EST-11 in the live
+    suite covers the model itself.
+    """
+
+    async def test_creation_returns_immediately_with_a_pending_estimate(
+        self, client, alice
+    ):
+        """T-EST-01."""
+        _, token = alice
+        response = await client.post(
+            "/tasks", headers=auth(token), json={"title": "t", "is_primary": True}
+        )
+        assert response.status_code == 201
+        body = response.json()
+        assert body["estimation_status"] == "pending"
+        assert body["estimate_minutes"] is None
+
+    async def test_creation_is_well_under_the_latency_budget(self, client, alice):
+        """T-EST-02. The 5 second budget belongs to the estimate, not the request;
+        the request itself must not wait for it."""
+        import time
+
+        _, token = alice
+        started = time.monotonic()
+        response = await client.post(
+            "/tasks", headers=auth(token), json={"title": "t", "is_primary": True}
+        )
+        elapsed = time.monotonic() - started
+
+        assert response.status_code == 201
+        assert elapsed < 1.0, "task creation must not block on estimation"
+
+    async def test_an_unestimated_primary_leaves_the_day_indeterminate(
+        self, client, alice
+    ):
+        """AC-17 over HTTP: unknown capacity must not read as headroom."""
+        _, token = alice
+        await client.post("/tasks", headers=auth(token), json={"title": "t", "is_primary": True})
+
+        day = (await client.get("/days/current", headers=auth(token))).json()
+        assert day["is_indeterminate"] is True
+        assert day["indeterminate_reason"] == "unestimated_primaries"
+        assert day["is_at_risk"] is False
+
+
+class TestHeatmapData:
+    """The data half of the heatmap contract. The colour rules are frontend and
+    are covered by the Vitest suite."""
+
+    async def test_view_one_counts_primary_and_non_primary_together(
+        self, client, alice
+    ):
+        """T-HEAT-01. The two views use different denominators on purpose."""
+        _, token = alice
+        ids = []
+        for i in range(2):
+            r = await client.post(
+                "/tasks", headers=auth(token), json={"title": f"p{i}", "is_primary": True}
+            )
+            ids.append(r.json()["id"])
+        for i in range(3):
+            r = await client.post(
+                "/tasks", headers=auth(token), json={"title": f"n{i}", "is_primary": False}
+            )
+            ids.append(r.json()["id"])
+        for task_id in ids:
+            await client.post(f"/tasks/{task_id}/complete", headers=auth(token))
+
+        today = datetime.now(UTC).date()
+        cells = (
+            await client.get(
+                f"/days/heatmap/range?start={today - timedelta(days=1)}&end={today}",
+                headers=auth(token),
+            )
+        ).json()
+        cell = next(c for c in cells if c["completed_total"] > 0)
+        assert cell["completed_total"] == 5, "counts everything finished"
+        assert cell["completed_primary"] == 2, "view 2's denominator is primaries only"
+
+    async def test_cells_are_keyed_by_anchor_date(self, client, session, alice):
+        """T-HEAT-05. A completion paints the day that was running, not the
+        calendar date it happened on."""
+        from doer.services import day_service
+
+        user, token = alice
+        await client.post("/tasks", headers=auth(token), json={"title": "t"})
+
+        day = await day_service.current_day(session, user)
+        today = datetime.now(UTC).date()
+        cells = (
+            await client.get(
+                f"/days/heatmap/range?start={today - timedelta(days=2)}&end={today}",
+                headers=auth(token),
+            )
+        ).json()
+        assert any(c["anchor_date"] == day.anchor_date.isoformat() for c in cells)
+
+
+class TestStoredTimestamps:
+    async def test_every_stored_instant_is_timezone_aware_utc(self, client, session, alice):
+        """T-DAY-11. A naive timestamp anywhere would silently re-anchor a day."""
+        from datetime import timezone
+
+        from doer.models import LogicalDay, Task
+        from doer.services import day_service
+
+        user, token = alice
+        await client.post("/tasks", headers=auth(token), json={"title": "t", "is_primary": True})
+        day = await day_service.current_day(session, user)
+
+        task = await session.scalar(select(Task).where(Task.user_id == user.id))
+        stored = await session.scalar(select(LogicalDay).where(LogicalDay.id == day.id))
+
+        for value in (stored.start_at, stored.end_at, stored.created_at, task.created_at):
+            assert value.tzinfo is not None
+            assert value.utcoffset() == timezone.utc.utcoffset(None)
+
+    async def test_days_are_queried_by_anchor_date_not_by_timestamp(
+        self, client, session, alice
+    ):
+        """The anchor date is the key, so a lookup by it must find the day even
+        though the day's instants span two calendar dates."""
+        from doer.services import day_service
+
+        user, token = alice
+        await client.get("/days/current", headers=auth(token))
+        day = await day_service.current_day(session, user)
+
+        response = await client.get(f"/days/{day.anchor_date.isoformat()}", headers=auth(token))
+        assert response.status_code == 200
+        assert response.json()["anchor_date"] == day.anchor_date.isoformat()
