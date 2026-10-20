@@ -14,7 +14,7 @@ Derived from implementation plan `daily-task-planner` v1 and ADR 0001 (local-fir
 
 **Prerequisite (not a milestone): repository hygiene.** Git initialized by the user on 2026-10-20. A `.gitignore` covering `.venv`, `node_modules`, `__pycache__`, `.env`, and `.DS_Store` still needs confirming before scaffolding lands, since `.env` carries the Fernet key and the Anthropic API key.
 
-- **M1: Foundations.** Docker Compose scaffolding (Postgres 17, FastAPI under uvicorn, Vite dev server), uv project setup on Python 3.13, Alembic baseline, Google OAuth authorization code flow with `calendar.freebusy` in one consent screen, Fernet-encrypted refresh token storage, session cookie, logical day model (materialized rows, anchor date, snapshotted shape and capacity), preference blocks. Status: not started.
+- **M1: Foundations.** Docker Compose scaffolding (Postgres 17, FastAPI under uvicorn, Vite dev server), uv project setup on Python 3.13, Alembic baseline, Google OAuth authorization code flow with `calendar.freebusy` in one consent screen, Fernet-encrypted refresh token storage, session cookie, logical day model (materialized rows, anchor date, snapshotted shape and capacity), preference blocks. Status: **done** (2026-10-21).
 - **M2: Task core.** Task CRUD, primary and non-primary split, 4-primary cap, completed-task immutability, reversal allowed only before day close, carry-forward, lazy idempotent day close with the uniqueness constraint on (user, anchor date). Status: not started.
 - **M3: Assistant and estimation.** Chat capture with confirmable proposals, inline estimation attempt, task-row estimation state, in-process asyncio sweeper with bounded retries, 15-minute bucket enforcement and clamping, manual override. Status: not started.
 - **M4: Capacity and scoring.** On-demand `freebusy.query` calls over the logical day window with snapshot reuse on failure, busy-interval-only persistence, net capacity base, configurable 50% threshold, at-risk flag, 75% verdict with the 2-primary neutral floor, indeterminate handling when focus blocks or estimates are missing. Status: not started.
@@ -26,9 +26,9 @@ Derived from implementation plan `daily-task-planner` v1 and ADR 0001 (local-fir
 
 ## Feature Checklist
 
-- [ ] daily-task-planner: Daily commitment planner with 4-task cap, 75% success rule, user-defined logical day, and read-only Google Calendar capacity input (plan: v1, status: approved)
+- [ ] daily-task-planner: Daily commitment planner with 4-task cap, 75% success rule, user-defined logical day, and read-only Google Calendar capacity input (plan: v1, status: in_progress)
 
-Plan approved by the user on 2026-10-21. Moves to `in_progress` when M1 implementation begins.
+Plan approved by the user on 2026-10-21, moved to `in_progress` when M1 began.
 
 ## Business Objective Coverage
 

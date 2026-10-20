@@ -2,7 +2,7 @@
 type: implementation_plan
 feature: daily-task-planner
 version: 1
-status: approved
+status: in_progress
 unplanned: false
 linear_issue: null
 created: 2026-10-20

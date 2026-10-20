@@ -1,0 +1,47 @@
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: doer
+      POSTGRES_PASSWORD: doer
+      POSTGRES_DB: doer
+    ports:
+      - "5432:5432"
+    volumes:
+      - doer-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U doer -d doer"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      target: dev
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://doer:doer@db:5432/doer
+    ports:
+      - "8787:8000"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    image: node:23-slim
+    working_dir: /web
+    command: sh -c "npm install -g pnpm@10.33.2 && pnpm install && pnpm dev --host 0.0.0.0"
+    environment:
+      VITE_API_BASE: http://localhost:8787
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/web
+      - doer-web-modules:/web/node_modules
+
+volumes:
+  doer-pgdata:
+  doer-web-modules:

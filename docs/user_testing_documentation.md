@@ -6,7 +6,7 @@ This document contains step-by-step manual test instructions for human testers. 
 
 ## Before You Start
 
-**Starting the app.** From the project root, run `docker compose up`. Wait until the logs report the API listening on port 8000 and the web server on port 5173. Open `http://localhost:5173`.
+**Starting the app.** From the project root, run `docker compose up`. Wait until the logs report the API listening on port 8787 and the web server on port 5173. Open `http://localhost:5173`.
 
 **Test account.** Use the Google account that is registered on the OAuth client (see `docs/setup/gcp_setup.md`). If the consent screen shows "Google hasn't verified this app", that is expected on the External path: click **Advanced**, then **Go to Doer**.
 

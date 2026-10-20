@@ -88,7 +88,7 @@ Adopt **Option C**, a local-first FastAPI monolith, with the production-shaped c
 
 **Database.** Postgres 17 in a container with a named volume. The local `psql` client is 14 and will refuse to dump from a 17 server, so database access goes through `docker compose exec db psql` and `pg_dump` runs inside the container.
 
-**Authentication.** The OAuth 2.0 authorization code flow is handled directly by FastAPI, requesting `openid`, `email`, `profile`, and `calendar.freebusy` with offline access in a single consent screen. The redirect URI is `http://localhost:8000/auth/google/callback`. The session is an HttpOnly, SameSite=Lax cookie. Refresh tokens are stored encrypted under a Fernet key held in the environment, never in the database.
+**Authentication.** The OAuth 2.0 authorization code flow is handled directly by FastAPI, requesting `openid`, `email`, `profile`, and `calendar.freebusy` with offline access in a single consent screen. The redirect URI is `http://localhost:8787/auth/google/callback`. The session is an HttpOnly, SameSite=Lax cookie. Refresh tokens are stored encrypted under a Fernet key held in the environment, never in the database.
 
 **Calendar reads.** On-demand `freebusy.query` calls scoped to the logical day's window, triggered at logical day open and by an explicit refresh action, with the last successful snapshot reused when a call fails. `freebusy.query` returns availability intervals only, so event titles and descriptions never reach the server rather than being received and discarded. Intervals across the user's calendars are merged before capacity subtraction. There is no sync token, which costs nothing here because this ADR already chose on-demand pulls over push notifications.
 

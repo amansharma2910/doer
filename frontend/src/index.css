@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+/* Doer is deliberately quiet. The palette carries one accent for pending work,
+   one for success, one for failure, and one for at-risk, and nothing else.
+   Over-commitment is signalled by colour alone: no modal, no alert, no nagging. */
+@theme {
+  --color-ink: #16181d;
+  --color-paper: #fbfaf8;
+  --color-muted: #8a8f98;
+  --color-line: #e6e4e0;
+  --color-success: #2f9e5e;
+  --color-failure: #c6483f;
+  --color-risk: #d98324;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-ink: #ecebe8;
+    --color-paper: #15161a;
+    --color-muted: #8a8f98;
+    --color-line: #2a2c32;
+  }
+}

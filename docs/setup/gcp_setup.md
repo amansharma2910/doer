@@ -105,9 +105,9 @@ The console marks sensitive scopes with an indicator in this list. Check the ind
 - Application type: **Web application**
 - Name: `Doer local`
 - Authorized JavaScript origins: `http://localhost:5173` (the Vite dev server)
-- Authorized redirect URIs: `http://localhost:8000/auth/google/callback`
+- Authorized redirect URIs: `http://localhost:8787/auth/google/callback`
 
-Redirect URIs must match byte for byte, including scheme, port, and trailing slash. `http://localhost:8000/auth/google/callback` and `http://127.0.0.1:8000/auth/google/callback` are different URIs; register both if you intend to use either. Plain `http` is permitted for localhost only.
+Redirect URIs must match byte for byte, including scheme, port, and trailing slash. `http://localhost:8787/auth/google/callback` and `http://127.0.0.1:8787/auth/google/callback` are different URIs; register both if you intend to use either. Plain `http` is permitted for localhost only.
 
 Download the JSON or copy the client ID and client secret.
 
@@ -122,7 +122,7 @@ grep -q '^\.env$' .gitignore && echo ".env is ignored" || echo "WARNING: add .en
 ```env
 GOOGLE_CLIENT_ID=...apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=...
-GOOGLE_REDIRECT_URI=http://localhost:8000/auth/google/callback
+GOOGLE_REDIRECT_URI=http://localhost:8787/auth/google/callback
 GOOGLE_SCOPES=openid email profile https://www.googleapis.com/auth/calendar.freebusy
 
 ANTHROPIC_API_KEY=sk-ant-...
