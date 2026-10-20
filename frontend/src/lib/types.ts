@@ -19,18 +19,80 @@ export type LogicalDay = {
   busy_minutes_subtracted: number | null;
   threshold_minutes: number | null;
   committed_minutes: number;
-  calendar_state: string;
+  calendar_state: "connected" | "revoked" | "stale" | "absent";
   is_indeterminate: boolean;
   indeterminate_reason: string | null;
   is_at_risk: boolean;
   closed_at: string | null;
-  verdict: string | null;
+  verdict: Verdict | null;
+  calendar_synced_at: string | null;
+  calendar_is_stale: boolean;
+};
+
+export type Verdict = "success" | "failure" | "neutral" | "unscheduled";
+
+export type PreferenceKind =
+  | "deep_work"
+  | "personal_project"
+  | "personal"
+  | "social"
+  | "other";
+
+export const PREFERENCE_LABELS: Record<PreferenceKind, string> = {
+  deep_work: "Deep work",
+  personal_project: "Personal project",
+  personal: "Personal",
+  social: "Social",
+  other: "Other",
+};
+
+/** Only these two count toward capacity. The rest are time, not headroom. */
+export const FOCUS_KINDS: PreferenceKind[] = ["deep_work", "personal_project"];
+
+export type Task = {
+  id: string;
+  logical_day_id: string;
+  anchor_date: string;
+  title: string;
+  notes: string | null;
+  is_primary: boolean;
+  preference_kind: PreferenceKind;
+  sort_index: number;
+  estimate_minutes: number | null;
+  estimate_source: "model" | "user" | null;
+  estimation_status: "pending" | "estimated" | "failed";
+  started_at: string | null;
+  completed_at: string | null;
+  actual_minutes: number | null;
+  carry_forward_count: number;
+  is_complete: boolean;
 };
 
 export type PreferenceBlock = {
   id: string;
-  kind: string;
+  kind: PreferenceKind;
   start_offset_minutes: number;
   end_offset_minutes: number;
   is_focus: boolean;
+};
+
+export type HeatmapCell = {
+  anchor_date: string;
+  completed_total: number;
+  completed_primary: number;
+  scheduled_primary: number;
+  verdict: Verdict | null;
+  is_at_risk: boolean;
+};
+
+export type ProposedTask = {
+  title: string;
+  preference_kind: PreferenceKind;
+  estimate_minutes: number;
+};
+
+export type RuleError = {
+  message: string;
+  code: string;
+  remedy: string | null;
 };

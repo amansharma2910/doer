@@ -1,35 +1,38 @@
-import { useQuery } from "@tanstack/react-query";
-import { api, ApiError, loginUrl } from "./lib/api";
-import type { User } from "./lib/types";
-import { SignIn } from "./pages/SignIn";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { useMe } from "./lib/hooks";
+import { ApiError, loginUrl } from "./lib/api";
 import { Dashboard } from "./pages/Dashboard";
+import { Settings } from "./pages/Settings";
+import { SignIn } from "./pages/SignIn";
 
 export function App() {
-  const { data, isLoading, error } = useQuery<User>({
-    queryKey: ["me"],
-    queryFn: () => api<User>("/auth/me"),
-    retry: false,
-  });
+  const { data: user, isLoading, error } = useMe();
 
-  if (isLoading) {
-    return <Centered>Loading</Centered>;
-  }
+  if (isLoading) return <Centered>Loading</Centered>;
 
   if (error instanceof ApiError && error.status === 401) {
     return <SignIn href={loginUrl} />;
   }
 
-  if (error) {
+  if (error || !user) {
     return (
       <Centered>
         <p className="text-[var(--color-failure)]">
-          Could not reach the API. Is it running on port 8000?
+          Could not reach the API. Is it running on port 8787?
         </p>
       </Centered>
     );
   }
 
-  return <Dashboard user={data!} />;
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Dashboard user={user} />} />
+        <Route path="/settings" element={<Settings user={user} />} />
+        <Route path="*" element={<Dashboard user={user} />} />
+      </Routes>
+    </BrowserRouter>
+  );
 }
 
 function Centered({ children }: { children: React.ReactNode }) {
