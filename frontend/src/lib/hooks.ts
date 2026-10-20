@@ -100,8 +100,17 @@ export function useReorderTask() {
 }
 
 export function useUpdateTask() {
-  return useTaskMutation(({ id, ...body }: { id: string; estimate_minutes?: number; title?: string }) =>
-    api<Task>(`/tasks/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  return useTaskMutation(
+    ({
+      id,
+      ...body
+    }: {
+      id: string;
+      title?: string;
+      notes?: string;
+      preference_kind?: string;
+      estimate_minutes?: number;
+    }) => api<Task>(`/tasks/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   );
 }
 

@@ -42,7 +42,7 @@ class TestPrimaryCap:
             await make(session, user, day, "fifth", primary=True)
 
         assert exc.value.code == "primary_cap_reached"
-        assert "demote" in exc.value.remedy
+        assert "demote" in exc.value.remedy.lower()
 
     async def test_the_rejection_is_logged(self, session, user, day):
         for i in range(4):

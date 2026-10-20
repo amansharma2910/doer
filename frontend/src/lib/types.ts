@@ -97,3 +97,9 @@ export type RuleError = {
   code: string;
   remedy: string | null;
 };
+
+/** The daily commitment cap. Mirrors MAX_PRIMARIES on the server. */
+export const MAX_PRIMARIES = 4;
+
+/** The only durations an estimate may hold. The API snaps to these regardless. */
+export const ESTIMATE_BUCKETS = [15, 30, 45, 60, 90, 120, 150, 180, 240, 300, 360, 480];

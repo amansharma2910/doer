@@ -11,6 +11,12 @@ Known gaps between what the documents promise and what the code does.
    leading indicator is computed over a subset that may stay small. If that subset
    is thin at review time, it is the first number to distrust.
 
+2. **A user row cannot be deleted once they have events.** The append-only trigger
+   refuses the cascade from `users` into `events`, so account deletion fails. Correct
+   for an immutable log and irrelevant at one user, but it means "delete my account"
+   needs a deliberate carve-out before Doer has anyone else on it. Removing a test
+   user currently requires disabling the trigger for the statement.
+
 Closed on 2026-10-21: carry-forward demotions are now surfaced in the task list;
 a frontend test suite exists (Vitest, 18 tests covering the heatmap colour rules
 and contract-refusal decoding); and migrations run on container start.

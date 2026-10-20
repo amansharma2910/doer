@@ -81,9 +81,9 @@ async def create_task(
                 properties={"attempted_source": source, "remedy_offered": "demote_or_non_primary"},
             )
             raise TaskRuleViolation(
-                f"this day already holds {MAX_PRIMARIES} primary tasks",
+                f"This day already holds {MAX_PRIMARIES} primary tasks",
                 code="primary_cap_reached",
-                remedy="demote an existing primary, or add this one as non-primary",
+                remedy="Demote an existing primary, or add this one as an extra",
             )
 
     task = Task(
@@ -165,7 +165,7 @@ async def complete_task(session: AsyncSession, user: User, task: Task, day: Logi
         return task
     if day.is_closed:
         raise TaskRuleViolation(
-            "this day has closed", code="day_closed", remedy="work on the current day instead"
+            "This day has closed", code="day_closed", remedy="Work on the current day instead"
         )
 
     now = utcnow()
@@ -212,7 +212,7 @@ async def reverse_completion(
             properties={"task_id": task.id, "reason": "day_closed"},
         )
         raise TaskRuleViolation(
-            "this day has closed and its verdict is final",
+            "This day has closed and its verdict is final",
             code="day_closed",
             remedy=None,
         )
@@ -248,7 +248,7 @@ async def delete_task(session: AsyncSession, user: User, task: Task, day: Logica
             properties={"task_id": task.id, "reason": "completed_immutable"},
         )
         raise TaskRuleViolation(
-            "completed tasks are permanent and cannot be deleted",
+            "Completed tasks are permanent and cannot be deleted",
             code="completed_immutable",
             remedy=None,
         )
@@ -278,9 +278,9 @@ async def set_primary(
         count = await primary_count(session, day)
         if count >= MAX_PRIMARIES:
             raise TaskRuleViolation(
-                f"this day already holds {MAX_PRIMARIES} primary tasks",
+                f"This day already holds {MAX_PRIMARIES} primary tasks",
                 code="primary_cap_reached",
-                remedy="demote an existing primary first",
+                remedy="Demote an existing primary first",
             )
 
     task.is_primary = primary

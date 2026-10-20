@@ -14,6 +14,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { useState } from "react";
 import { asRuleError } from "../lib/api";
 import {
   formatMinutes,
@@ -21,8 +22,14 @@ import {
   useDeleteTask,
   useReorderTask,
   useSetPrimary,
+  useUpdateTask,
 } from "../lib/hooks";
-import { PREFERENCE_LABELS, type Task } from "../lib/types";
+import {
+  ESTIMATE_BUCKETS,
+  PREFERENCE_LABELS,
+  type PreferenceKind,
+  type Task,
+} from "../lib/types";
 
 export function TaskList({ tasks }: { tasks: Task[] }) {
   const demoted = tasks.filter((t) => t.carry_forward_demoted);
@@ -118,9 +125,12 @@ export function TaskRow({
   task: Task;
   dragHandle?: Record<string, unknown>;
 }) {
+  const [editing, setEditing] = useState(false);
   const complete = useCompleteTask();
   const remove = useDeleteTask();
   const setPrimary = useSetPrimary();
+
+  if (editing) return <TaskEditor task={task} onDone={() => setEditing(false)} />;
 
   return (
     <div className="group flex items-center gap-3 rounded-md px-2 py-2 hover:bg-black/[0.025] dark:hover:bg-white/[0.03]">
@@ -151,6 +161,12 @@ export function TaskRow({
 
       <div className="flex shrink-0 items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100">
         <button
+          onClick={() => setEditing(true)}
+          className="text-xs text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+        >
+          Edit
+        </button>
+        <button
           onClick={() => setPrimary.mutate({ id: task.id, isPrimary: !task.is_primary })}
           className="text-xs text-[var(--color-muted)] hover:text-[var(--color-ink)]"
         >
@@ -166,6 +182,89 @@ export function TaskRow({
 
       {setPrimary.error && <RuleMessage error={setPrimary.error} />}
     </div>
+  );
+}
+
+/**
+ * Inline editing, in place rather than in a modal.
+ *
+ * The estimate is a fixed set of buckets because that is what the API stores: an
+ * arbitrary number would be snapped on arrival, and showing a free field invites
+ * someone to type 37 and watch it silently become 45.
+ */
+function TaskEditor({ task, onDone }: { task: Task; onDone: () => void }) {
+  const [title, setTitle] = useState(task.title);
+  const [kind, setKind] = useState<PreferenceKind>(task.preference_kind);
+  const [minutes, setMinutes] = useState<number | null>(task.estimate_minutes);
+  const update = useUpdateTask();
+
+  function save(event: React.FormEvent) {
+    event.preventDefault();
+    const trimmed = title.trim();
+    if (!trimmed) return;
+    update.mutate(
+      {
+        id: task.id,
+        title: trimmed,
+        preference_kind: kind,
+        ...(minutes !== null ? { estimate_minutes: minutes } : {}),
+      },
+      { onSuccess: onDone },
+    );
+  }
+
+  return (
+    <form
+      onSubmit={save}
+      className="rounded-md border border-[var(--color-line)] px-3 py-3"
+    >
+      <input
+        autoFocus
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        onKeyDown={(e) => e.key === "Escape" && onDone()}
+        className="w-full border-b border-[var(--color-line)] bg-transparent pb-1 text-sm outline-none"
+      />
+
+      <div className="mt-3 flex flex-wrap items-center gap-4 text-xs">
+        <select
+          value={kind}
+          onChange={(e) => setKind(e.target.value as PreferenceKind)}
+          className="border-b border-[var(--color-line)] bg-transparent pb-1 outline-none"
+        >
+          {Object.entries(PREFERENCE_LABELS).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+
+        <label className="flex items-center gap-2">
+          <span className="text-[var(--color-muted)]">Takes</span>
+          <select
+            value={minutes ?? ""}
+            onChange={(e) => setMinutes(e.target.value ? Number(e.target.value) : null)}
+            className="border-b border-[var(--color-line)] bg-transparent pb-1 outline-none"
+          >
+            <option value="">not estimated yet</option>
+            {ESTIMATE_BUCKETS.map((value) => (
+              <option key={value} value={value}>
+                {formatMinutes(value)}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <div className="ml-auto flex gap-3">
+          <button type="button" onClick={onDone} className="text-[var(--color-muted)]">
+            Cancel
+          </button>
+          <button type="submit" className="font-medium">
+            {update.isPending ? "Saving" : "Save"}
+          </button>
+        </div>
+      </div>
+    </form>
   );
 }
 

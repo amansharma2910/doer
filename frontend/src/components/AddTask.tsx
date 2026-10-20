@@ -1,35 +1,51 @@
 import { useState } from "react";
 import { asRuleError } from "../lib/api";
 import { useCreateTask } from "../lib/hooks";
-import { PREFERENCE_LABELS, type PreferenceKind } from "../lib/types";
+import { MAX_PRIMARIES, PREFERENCE_LABELS, type PreferenceKind } from "../lib/types";
 
 export function AddTask({ primariesUsed }: { primariesUsed: number }) {
+  const slotsFull = primariesUsed >= MAX_PRIMARIES;
+
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
+  // Decided when the form opens rather than at mount: at mount the task list has
+  // usually not loaded yet, so primariesUsed is still zero and the default would
+  // land on a choice the day cannot accept.
   const [isPrimary, setIsPrimary] = useState(true);
   const [kind, setKind] = useState<PreferenceKind>("deep_work");
   const create = useCreateTask();
 
   const rule = asRuleError(create.error);
+  const blocked = slotsFull && isPrimary;
 
-  function submit(event: React.FormEvent) {
-    event.preventDefault();
-    if (!title.trim()) return;
+  function add(asPrimary: boolean) {
+    const trimmed = title.trim();
+    if (!trimmed) return;
     create.mutate(
-      { title: title.trim(), is_primary: isPrimary, preference_kind: kind },
+      { title: trimmed, is_primary: asPrimary, preference_kind: kind },
       {
         onSuccess: () => {
           setTitle("");
+          setIsPrimary(!slotsFull);
           setOpen(false);
         },
       },
     );
   }
 
+  function submit(event: React.FormEvent) {
+    event.preventDefault();
+    if (blocked) return;
+    add(isPrimary);
+  }
+
   if (!open) {
     return (
       <button
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setIsPrimary(!slotsFull);
+          setOpen(true);
+        }}
         aria-label="Add a task"
         className="fixed bottom-8 right-8 h-11 w-11 rounded-full border border-[var(--color-line)]
                    bg-[var(--color-paper)] text-lg leading-none shadow-sm
@@ -54,14 +70,18 @@ export function AddTask({ primariesUsed }: { primariesUsed: number }) {
 
         <div className="flex flex-wrap items-center gap-4 text-xs">
           <label className="flex items-center gap-2">
+            {/* Never disabled. Disabling it while checked made the remedy the
+                error message suggests physically unreachable. */}
             <input
               type="checkbox"
               checked={isPrimary}
               onChange={(e) => setIsPrimary(e.target.checked)}
-              disabled={primariesUsed >= 4}
             />
-            <span className={primariesUsed >= 4 ? "text-[var(--color-muted)]" : undefined}>
-              One of today&rsquo;s four {primariesUsed >= 4 && "(all four taken)"}
+            <span>
+              One of today&rsquo;s four{" "}
+              <span className="text-[var(--color-muted)]">
+                ({slotsFull ? "all four taken" : `${primariesUsed} of ${MAX_PRIMARIES} used`})
+              </span>
             </span>
           </label>
 
@@ -89,17 +109,33 @@ export function AddTask({ primariesUsed }: { primariesUsed: number }) {
             >
               Cancel
             </button>
-            <button type="submit" className="font-medium">
+            <button type="submit" disabled={blocked} className="font-medium disabled:opacity-40">
               Add
             </button>
           </div>
         </div>
 
-        {rule && (
-          <p className="text-xs text-[var(--color-risk)]">
-            {rule.message}
-            {rule.remedy && <span className="text-[var(--color-muted)]">. {rule.remedy}</span>}
+        {blocked ? (
+          <p className="flex flex-wrap items-center gap-x-2 text-xs text-[var(--color-muted)]">
+            <span>
+              Today&rsquo;s four are taken. Free a slot by demoting one, or keep this
+              as an extra.
+            </span>
+            <button
+              type="button"
+              onClick={() => add(false)}
+              className="font-medium text-[var(--color-ink)] underline underline-offset-2"
+            >
+              Add as an extra
+            </button>
           </p>
+        ) : (
+          rule && (
+            <p className="text-xs text-[var(--color-risk)]">
+              {rule.message}
+              {rule.remedy && <span className="text-[var(--color-muted)]">. {rule.remedy}</span>}
+            </p>
+          )
         )}
       </form>
     </div>

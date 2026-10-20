@@ -192,7 +192,7 @@ class TestContractRefusalBodies:
         assert response.status_code == 409
         detail = response.json()["detail"]
         assert detail["code"] == "primary_cap_reached"
-        assert "demote" in detail["remedy"]
+        assert "demote" in detail["remedy"].lower()
         assert isinstance(detail["message"], str)
 
     async def test_deleting_a_completed_task_returns_the_immutability_code(self, client, alice):
