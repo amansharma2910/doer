@@ -158,7 +158,20 @@ If the refresh token is missing, see gotcha 2 below.
 
 5. **A logo triggers brand verification.** Leave Branding's logo field empty until you actually want to be verified.
 
-6. **Redirect URI mismatches are exact-match failures.** `localhost` is not `127.0.0.1`, and a trailing slash counts.
+6. **`Error 400: redirect_uri_mismatch`.** The most common first failure, and it
+   means Google compared what Doer sent against the list on the OAuth client and
+   found no exact match. Confirm what Doer is actually sending before changing
+   anything in the console:
+
+   ```bash
+   curl -s -o /dev/null -w "%{redirect_url}\n" http://localhost:8787/auth/google/login
+   ```
+
+   The `redirect_uri` parameter in that URL is the string to register, character
+   for character, under **Clients → your client → Authorized redirect URIs**.
+   Matching is exact: `localhost` is not `127.0.0.1`, `http` is not `https`, the
+   port matters, and a trailing slash counts. Changes take a minute or two to
+   propagate, so a retry immediately after saving can still fail.
 
 7. **Publishing status and scope changes can take a few minutes to propagate.** If a change does not seem to apply, wait before debugging code.
 
