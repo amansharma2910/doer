@@ -47,15 +47,11 @@ async def create_session(session: AsyncSession, user: User, response: Response) 
 async def destroy_session(session: AsyncSession, request: Request, response: Response) -> None:
     raw = request.cookies.get(COOKIE_NAME)
     if raw:
-        await session.execute(
-            delete(AuthSession).where(AuthSession.token_hash == hash_token(raw))
-        )
+        await session.execute(delete(AuthSession).where(AuthSession.token_hash == hash_token(raw)))
     response.delete_cookie(COOKIE_NAME, path="/")
 
 
-async def current_user(
-    request: Request, session: AsyncSession = Depends(get_session)
-) -> User:
+async def current_user(request: Request, session: AsyncSession = Depends(get_session)) -> User:
     raw = request.cookies.get(COOKIE_NAME)
     if not raw:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "not signed in")

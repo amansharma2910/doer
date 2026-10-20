@@ -92,7 +92,9 @@ class TestDstTransitions:
 class TestBlockOffsets:
     def test_block_crossing_midnight_needs_no_special_case(self):
         """23:00 to 00:30 inside a 14:00 day is just offsets 540 to 630."""
-        start, end, minutes = offset_bounds(date(2026, 3, 10), time(14, 0), 540, 630, "Asia/Kolkata")
+        start, end, minutes = offset_bounds(
+            date(2026, 3, 10), time(14, 0), 540, 630, "Asia/Kolkata"
+        )
         assert minutes == 90
         local_start = start.astimezone(ZoneInfo("Asia/Kolkata"))
         local_end = end.astimezone(ZoneInfo("Asia/Kolkata"))

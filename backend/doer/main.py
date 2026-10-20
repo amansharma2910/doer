@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from doer.api import auth, days, settings_routes
+from doer.api import auth, days, settings_routes, tasks
 from doer.config import get_settings
 
 
@@ -35,6 +35,7 @@ def create_app() -> FastAPI:
     app.include_router(auth.router)
     app.include_router(settings_routes.router)
     app.include_router(days.router)
+    app.include_router(tasks.router)
 
     @app.get("/health")
     async def health() -> dict:

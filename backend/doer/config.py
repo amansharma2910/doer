@@ -13,9 +13,7 @@ class Settings(BaseSettings):
     google_client_id: str = ""
     google_client_secret: str = ""
     google_redirect_uri: str = "http://localhost:8787/auth/google/callback"
-    google_scopes: str = (
-        "openid email profile https://www.googleapis.com/auth/calendar.freebusy"
-    )
+    google_scopes: str = "openid email profile https://www.googleapis.com/auth/calendar.freebusy"
 
     anthropic_api_key: str = ""
     estimation_model: str = "claude-haiku-4-5"

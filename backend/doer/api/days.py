@@ -11,7 +11,7 @@ from doer.api.deps import current_user
 from doer.db import get_session
 from doer.models import LogicalDay, User
 from doer.schemas.day import DayOut
-from doer.services import day_service
+from doer.services import close_service, day_service
 
 router = APIRouter(prefix="/days", tags=["days"])
 
@@ -41,6 +41,9 @@ def serialize(day: LogicalDay) -> DayOut:
 async def get_current_day(
     user: User = Depends(current_user), session: AsyncSession = Depends(get_session)
 ) -> DayOut:
+    # Catch up on elapsed days before answering, so a day that ended while the
+    # app was closed is scored and carried forward rather than silently skipped.
+    await close_service.close_elapsed_days(session, user)
     day = await day_service.current_day(session, user)
     if day is None:
         raise HTTPException(

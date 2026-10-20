@@ -49,9 +49,7 @@ def build_snapshot(user: User, blocks: list[PreferenceBlock]) -> dict:
 
 async def get_day(session: AsyncSession, user: User, anchor: date) -> LogicalDay | None:
     result = await session.execute(
-        select(LogicalDay).where(
-            LogicalDay.user_id == user.id, LogicalDay.anchor_date == anchor
-        )
+        select(LogicalDay).where(LogicalDay.user_id == user.id, LogicalDay.anchor_date == anchor)
     )
     return result.scalar_one_or_none()
 
@@ -159,9 +157,7 @@ async def current_day(
     day shape shorter than 24 hours. The caller surfaces that rather than guessing.
     """
     now = now or utcnow()
-    anchor = resolve_anchor_date(
-        now, user.day_start_time, user.day_duration_minutes, user.timezone
-    )
+    anchor = resolve_anchor_date(now, user.day_start_time, user.day_duration_minutes, user.timezone)
     if anchor is None:
         return None
     return await open_day(session, user, anchor)

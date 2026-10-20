@@ -57,6 +57,7 @@ class TestConcurrency:
         anchor date cannot both win, because the unique constraint on
         (user_id, anchor_date) refuses the second insert.
         """
+
         async def open_once():
             async with session_factory() as s:
                 merged = await s.merge(user)
@@ -67,9 +68,7 @@ class TestConcurrency:
 
         async with session_factory() as s:
             count = await s.scalar(
-                select(func.count())
-                .select_from(LogicalDay)
-                .where(LogicalDay.anchor_date == ANCHOR)
+                select(func.count()).select_from(LogicalDay).where(LogicalDay.anchor_date == ANCHOR)
             )
         assert count == 1
 
@@ -84,9 +83,7 @@ class TestConcurrency:
 
         async with session_factory() as s:
             count = await s.scalar(
-                select(func.count())
-                .select_from(Event)
-                .where(Event.name == "logical_day_opened")
+                select(func.count()).select_from(Event).where(Event.name == "logical_day_opened")
             )
         assert count == 1
 
@@ -137,9 +134,7 @@ class TestAppendOnly:
         await session.commit()
 
         with pytest.raises(Exception, match="append-only"):
-            await session.execute(
-                Event.__table__.update().values(name="tampered")
-            )
+            await session.execute(Event.__table__.update().values(name="tampered"))
             await session.commit()
 
     async def test_the_database_refuses_to_delete_an_event(self, session, user):

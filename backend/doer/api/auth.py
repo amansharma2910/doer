@@ -27,9 +27,7 @@ async def login(response: Response, force_consent: bool = False) -> RedirectResp
     state = secrets.token_urlsafe(24)
     url = google_oauth.authorize_url(state, force_consent=force_consent)
     redirect = RedirectResponse(url, status_code=status.HTTP_307_TEMPORARY_REDIRECT)
-    redirect.set_cookie(
-        STATE_COOKIE, state, httponly=True, samesite="lax", max_age=600, path="/"
-    )
+    redirect.set_cookie(STATE_COOKIE, state, httponly=True, samesite="lax", max_age=600, path="/")
     return redirect
 
 
@@ -79,9 +77,7 @@ async def callback(
         user.email = profile.get("email", user.email)
         user.name = profile.get("name", user.name)
 
-    token_result = await session.execute(
-        select(OAuthToken).where(OAuthToken.user_id == user.id)
-    )
+    token_result = await session.execute(select(OAuthToken).where(OAuthToken.user_id == user.id))
     token = token_result.scalar_one_or_none()
     if token is None:
         token = OAuthToken(user_id=user.id, refresh_token_encrypted=b"")

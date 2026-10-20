@@ -32,9 +32,7 @@ class CapacityResult:
     is_at_risk: bool
 
 
-def focus_intervals(
-    snapshot: dict, anchor: date, tz: str
-) -> list[tuple[datetime, datetime, int]]:
+def focus_intervals(snapshot: dict, anchor: date, tz: str) -> list[tuple[datetime, datetime, int]]:
     """Real UTC intervals for the focus blocks frozen into a day's snapshot."""
     start_time = time.fromisoformat(snapshot["day_start_time"])
     out = []

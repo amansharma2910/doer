@@ -29,9 +29,7 @@ def busy(y, m, d, h1, m1, h2, m2):
 
 
 def compute(**kwargs):
-    return capacity.compute(
-        snapshot=SNAPSHOT, anchor=ANCHOR, tz=TZ, ratio=0.5, **kwargs
-    )
+    return capacity.compute(snapshot=SNAPSHOT, anchor=ANCHOR, tz=TZ, ratio=0.5, **kwargs)
 
 
 class TestBase:
@@ -68,9 +66,7 @@ class TestBusySubtraction:
 
     def test_overlapping_busy_intervals_are_not_double_counted(self):
         """T-CAP-04."""
-        result = compute(
-            busy=[busy(2026, 3, 10, 16, 0, 17, 0), busy(2026, 3, 10, 16, 30, 17, 30)]
-        )
+        result = compute(busy=[busy(2026, 3, 10, 16, 0, 17, 0), busy(2026, 3, 10, 16, 30, 17, 30)])
         assert result.busy_minutes_subtracted == 90
 
     def test_busy_spanning_two_focus_blocks_counts_both_overlaps(self):
@@ -100,9 +96,10 @@ class TestIndeterminate:
         count sleep-adjacent and social hours as capacity and make the at-risk flag
         meaningless. Plan §8 forbids it explicitly.
         """
-        snapshot = {**SNAPSHOT, "blocks": [
-            {"kind": "social", "start_offset_minutes": 0, "end_offset_minutes": 600}
-        ]}
+        snapshot = {
+            **SNAPSHOT,
+            "blocks": [{"kind": "social", "start_offset_minutes": 0, "end_offset_minutes": 600}],
+        }
         result = capacity.compute(snapshot=snapshot, anchor=ANCHOR, tz=TZ, ratio=0.5)
         assert result.is_indeterminate is True
         assert result.indeterminate_reason == "no_focus_blocks"

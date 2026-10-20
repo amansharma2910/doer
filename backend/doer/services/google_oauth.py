@@ -100,9 +100,7 @@ def _parse_token_response(response: httpx.Response, *, allow_missing_refresh: bo
     if response.status_code != 200:
         payload = _safe_json(response)
         code = payload.get("error")
-        raise OAuthError(
-            f"token endpoint returned {response.status_code}: {code}", error_code=code
-        )
+        raise OAuthError(f"token endpoint returned {response.status_code}: {code}", error_code=code)
     data = response.json()
     refresh = data.get("refresh_token")
     if refresh is None and not allow_missing_refresh:

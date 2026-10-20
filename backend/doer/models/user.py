@@ -44,7 +44,9 @@ class User(Base):
     updated_at: Mapped[datetime] = updated_at_col()
 
     blocks: Mapped[list["PreferenceBlock"]] = relationship(
-        back_populates="user", cascade="all, delete-orphan", order_by="PreferenceBlock.start_offset_minutes"
+        back_populates="user",
+        cascade="all, delete-orphan",
+        order_by="PreferenceBlock.start_offset_minutes",
     )
     oauth_token: Mapped["OAuthToken | None"] = relationship(
         back_populates="user", cascade="all, delete-orphan", uselist=False
@@ -63,7 +65,10 @@ class AuthSession(Base):
 
     id: Mapped[uuid.UUID] = uuid_pk()
     user_id: Mapped[uuid.UUID] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -77,7 +82,10 @@ class OAuthToken(Base):
 
     id: Mapped[uuid.UUID] = uuid_pk()
     user_id: Mapped[uuid.UUID] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=False,
     )
     refresh_token_encrypted: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     access_token_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary)
@@ -92,9 +100,7 @@ class OAuthToken(Base):
 
     user: Mapped[User] = relationship(back_populates="oauth_token")
 
-    __table_args__ = (
-        CheckConstraint("status IN ('active','revoked')", name="ck_oauth_status"),
-    )
+    __table_args__ = (CheckConstraint("status IN ('active','revoked')", name="ck_oauth_status"),)
 
 
 class PreferenceBlock(Base):
