@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { api, ApiError } from "../lib/api";
 import { DayTimeline } from "../components/DayTimeline";
 import {
+  endForStart,
   findOverlap,
   firstFreeGap,
   formatDuration,
@@ -252,7 +253,12 @@ function BlocksEditor({ user }: { user: User }) {
               value={from}
               onChange={(e) => {
                 edited.current = true;
-                setFrom(e.target.value);
+                const next = e.target.value;
+                setFrom(next);
+                // Carry the end along rather than leaving a dead end the app
+                // already knows how to resolve.
+                const adjusted = endForStart(next, to, dayStart, user.day_duration_minutes);
+                if (adjusted) setTo(adjusted);
               }}
               className="border-b border-[var(--color-line)] bg-transparent pb-1 tabular-nums outline-none"
             />
@@ -296,6 +302,11 @@ function BlocksEditor({ user }: { user: User }) {
               at {offsetToClock(collision.start_offset_minutes, dayStart)} to{" "}
               {offsetToClock(collision.end_offset_minutes, dayStart)}. Blocks cannot
               share time.
+            </span>
+          ) : "error" in range && range.error.kind === "start_outside_day" ? (
+            <span className="text-[var(--color-risk)]">
+              That starts outside your day, which runs {range.error.dayStartsAt} to{" "}
+              {range.error.dayEndsAt}.
             </span>
           ) : "error" in range && range.error.kind === "past_day_end" ? (
             <span className="text-[var(--color-risk)]">

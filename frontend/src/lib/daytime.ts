@@ -33,8 +33,11 @@ export function offsetToClock(offset: number, dayStart: string): string {
   return formatClock(parseClock(dayStart) + offset);
 }
 
+export const DEFAULT_BLOCK_MINUTES = 60;
+
 export type BlockRangeError =
   | { kind: "zero_length" }
+  | { kind: "start_outside_day"; dayStartsAt: string; dayEndsAt: string }
   | { kind: "past_day_end"; endsAt: string; dayEndsAt: string };
 
 /**
@@ -51,6 +54,17 @@ export function toOffsets(
   dayDurationMinutes: number,
 ): { start: number; end: number } | { error: BlockRangeError } {
   const start = clockToOffset(from, dayStart);
+  if (start >= dayDurationMinutes) {
+    // The start itself falls in the gap between days, which no end time can fix.
+    return {
+      error: {
+        kind: "start_outside_day",
+        dayStartsAt: dayStart,
+        dayEndsAt: formatClock(parseClock(dayStart) + dayDurationMinutes),
+      },
+    };
+  }
+
   let end = clockToOffset(to, dayStart);
   if (end <= start) end += MINUTES_IN_DAY;
 
@@ -113,4 +127,31 @@ export function firstFreeGap(
     return { start: cursor, end: Math.min(dayDurationMinutes, cursor + preferredLength) };
   }
   return null;
+}
+
+/**
+ * An end time that makes the block valid, or null if the current one already does.
+ *
+ * Only consulted when the start changes. A start that leaves the end behind it is
+ * usually a half-finished edit rather than an intention, and refusing to proceed
+ * while knowing exactly what the person meant is pure friction. Note that an end
+ * earlier on the clock than the start is often correct here: on a day running
+ * 14:00 to 05:00, a block from 23:00 to 00:30 is ordinary, so the trigger is that
+ * the range does not fit, never that the clock reads backwards.
+ */
+export function endForStart(
+  from: string,
+  to: string,
+  dayStart: string,
+  dayDurationMinutes: number,
+  preferredMinutes = DEFAULT_BLOCK_MINUTES,
+): string | null {
+  const start = clockToOffset(from, dayStart);
+  if (start >= dayDurationMinutes) return null;
+
+  if ("start" in toOffsets(from, to, dayStart, dayDurationMinutes)) return null;
+
+  // Take the hour if it is there, and whatever remains of the day if it is not.
+  const end = Math.min(start + preferredMinutes, dayDurationMinutes);
+  return end > start ? offsetToClock(end, dayStart) : null;
 }

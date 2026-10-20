@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   clockToOffset,
+  endForStart,
   findOverlap,
   firstFreeGap,
   formatDuration,
@@ -84,7 +85,7 @@ describe("block ranges", () => {
   it("rejects a block starting before the day begins", () => {
     // 13:00 on a 14:00 day is 23 hours in, which no 15 hour day contains.
     const result = toOffsets("13:00", "13:30", DAY_START, DURATION);
-    expect("error" in result).toBe(true);
+    expect("error" in result && result.error.kind).toBe("start_outside_day");
   });
 });
 
@@ -163,5 +164,67 @@ describe("suggesting a free slot", () => {
       { start_offset_minutes: 0, end_offset_minutes: 300 },
     ];
     expect(firstFreeGap(blocks, 15 * 60)).toEqual({ start: 300, end: 420 });
+  });
+});
+
+describe("carrying the end time along when the start moves", () => {
+  it("advances an end left behind by the new start", () => {
+    // The reported case: From moved to 22:00 while Until still read 20:00, which
+    // wraps nearly a full day and cannot fit.
+    expect(endForStart("22:00", "20:00", DAY_START, DURATION)).toBe("23:00");
+  });
+
+  it("leaves a range that already works alone", () => {
+    expect(endForStart("15:00", "19:00", DAY_START, DURATION)).toBeNull();
+  });
+
+  it("leaves a legitimate midnight crossing alone", () => {
+    // 23:00 to 00:30 reads backwards on the clock and is entirely valid, so
+    // nothing should be "corrected" here.
+    expect(endForStart("23:00", "00:30", DAY_START, DURATION)).toBeNull();
+  });
+
+  it("gives an hour by default", () => {
+    expect(endForStart("18:00", "16:00", DAY_START, DURATION)).toBe("19:00");
+  });
+
+  it("gives whatever is left when there is less than an hour", () => {
+    // 04:30 leaves only thirty minutes before the day ends at 05:00.
+    expect(endForStart("04:30", "20:00", DAY_START, DURATION)).toBe("05:00");
+  });
+
+  it("declines to adjust when the start is outside the day", () => {
+    // 09:00 is in the gap between days; no end time rescues it.
+    expect(endForStart("09:00", "10:00", DAY_START, DURATION)).toBeNull();
+  });
+
+  it("declines to adjust at the exact end of the day", () => {
+    expect(endForStart("05:00", "06:00", DAY_START, DURATION)).toBeNull();
+  });
+
+  it("respects a custom preferred length", () => {
+    expect(endForStart("18:00", "16:00", DAY_START, DURATION, 30)).toBe("18:30");
+  });
+
+  it("works on an ordinary daytime shape", () => {
+    expect(endForStart("15:00", "11:00", "09:00", 8 * 60)).toBe("16:00");
+  });
+});
+
+describe("a start outside the day is named as such", () => {
+  it("reports start_outside_day rather than a confusing end-time error", () => {
+    const result = toOffsets("09:00", "10:00", DAY_START, DURATION);
+    expect("error" in result && result.error.kind).toBe("start_outside_day");
+    if ("error" in result && result.error.kind === "start_outside_day") {
+      expect(result.error.dayStartsAt).toBe("14:00");
+      expect(result.error.dayEndsAt).toBe("05:00");
+    }
+  });
+
+  it("still accepts a start on the final minute boundary", () => {
+    expect(toOffsets("04:59", "05:00", DAY_START, DURATION)).toEqual({
+      start: 14 * 60 + 59,
+      end: 15 * 60,
+    });
   });
 });
