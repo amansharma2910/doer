@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -18,7 +19,7 @@ from doer.schemas.task import (
     TaskOut,
     TaskUpdate,
 )
-from doer.services import close_service, day_service, task_service
+from doer.services import close_service, day_service, estimation, task_service
 from doer.services.task_service import TaskRuleViolation
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
@@ -112,6 +113,14 @@ async def create(
         raise rule_error(exc) from exc
 
     await task_service.recompute_capacity(session, user, day)
+
+    # The task is returned immediately with a pending estimate; the model call
+    # resolves it in place. The sweeper is the durability net if this attempt is
+    # lost to a restart.
+    task_id = task.id
+    await session.commit()
+    asyncio.create_task(estimation.estimate_in_background(task_id))  # noqa: RUF006
+
     return serialize(task, day)
 
 

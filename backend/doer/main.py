@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -11,13 +13,38 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from doer.api import auth, days, settings_routes, tasks
+from doer.api import assistant_routes, auth, days, settings_routes, tasks
 from doer.config import get_settings
+from doer.services import estimation
+
+
+async def _sweeper() -> None:
+    """Retry due estimates on a loop.
+
+    Running locally there is always a process alive, so this is the simplest
+    durable retry available: no Redis, no second deployed process. On a host that
+    scales to zero this loop stops being reliable, which is why the same callable
+    is also an HTTP endpoint a scheduler can drive (ADR 0001).
+    """
+    interval = get_settings().sweeper_interval_seconds
+    while True:
+        await asyncio.sleep(interval)
+        with contextlib.suppress(Exception):
+            await estimation.sweep()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    yield
+    task = None
+    if get_settings().sweeper_enabled:
+        task = asyncio.create_task(_sweeper())
+    try:
+        yield
+    finally:
+        if task is not None:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
 
 
 def create_app() -> FastAPI:
@@ -36,6 +63,7 @@ def create_app() -> FastAPI:
     app.include_router(settings_routes.router)
     app.include_router(days.router)
     app.include_router(tasks.router)
+    app.include_router(assistant_routes.router)
 
     @app.get("/health")
     async def health() -> dict:
