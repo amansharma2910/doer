@@ -25,7 +25,9 @@ function DayShapeForm({ user }: { user: User }) {
   const queryClient = useQueryClient();
   const [startTime, setStartTime] = useState(user.day_start_time.slice(0, 5));
   const [hours, setHours] = useState(user.day_duration_minutes / 60);
-  const [ratio, setRatio] = useState(user.capacity_ratio);
+  // Held as a percentage because that is how people think about load.
+  // The API takes a ratio, so it is converted on the way out.
+  const [loadPercent, setLoadPercent] = useState(Math.round(user.capacity_ratio * 100));
 
   const save = useMutation({
     mutationFn: () =>
@@ -34,7 +36,7 @@ function DayShapeForm({ user }: { user: User }) {
         body: JSON.stringify({
           day_start_time: `${startTime}:00`,
           day_duration_minutes: Math.round(hours * 60),
-          capacity_ratio: ratio,
+          capacity_ratio: Number((loadPercent / 100).toFixed(2)),
         }),
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.me }),
@@ -70,14 +72,14 @@ function DayShapeForm({ user }: { user: User }) {
         <Field label="Comfortable load">
           <input
             type="number"
-            min={0.1}
-            max={1}
-            step={0.05}
-            value={ratio}
-            onChange={(e) => setRatio(Number(e.target.value))}
-            className="w-16 bg-transparent tabular-nums outline-none"
+            min={10}
+            max={100}
+            step={5}
+            value={loadPercent}
+            onChange={(e) => setLoadPercent(Number(e.target.value))}
+            className="w-14 bg-transparent tabular-nums outline-none"
           />
-          <span className="ml-1 text-[var(--color-muted)]">of focus time</span>
+          <span className="ml-1 text-[var(--color-muted)]">% of focus time</span>
         </Field>
       </div>
 
