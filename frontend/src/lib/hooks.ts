@@ -21,16 +21,41 @@ export function useMe() {
   return useQuery<User>({ queryKey: keys.me, queryFn: () => api<User>("/auth/me"), retry: false });
 }
 
+/**
+ * Estimation resolves after the task is created, in a background job the browser
+ * knows nothing about. Without this the estimate sits on "..." until something
+ * else happens to refetch, which in practice meant a manual page refresh.
+ */
+export function isAwaitingEstimate(task: Task): boolean {
+  return task.estimate_minutes === null && task.estimation_status === "pending";
+}
+
+const ESTIMATE_POLL_MS = 2000;
+
 export function useDay() {
+  const queryClient = useQueryClient();
   return useQuery<LogicalDay>({
     queryKey: keys.day,
     queryFn: () => api<LogicalDay>("/days/current"),
     retry: false,
+    // An arriving estimate moves committed minutes and can flip the at-risk flag,
+    // so the day follows the same cadence as the tasks it summarizes.
+    refetchInterval: () =>
+      queryClient.getQueryData<Task[]>(keys.tasks)?.some(isAwaitingEstimate)
+        ? ESTIMATE_POLL_MS
+        : false,
   });
 }
 
 export function useTasks() {
-  return useQuery<Task[]>({ queryKey: keys.tasks, queryFn: () => api<Task[]>("/tasks") });
+  return useQuery<Task[]>({
+    queryKey: keys.tasks,
+    queryFn: () => api<Task[]>("/tasks"),
+    // Polls only while something is actually waiting, and stops the moment the
+    // last estimate lands or gives up.
+    refetchInterval: (query) =>
+      query.state.data?.some(isAwaitingEstimate) ? ESTIMATE_POLL_MS : false,
+  });
 }
 
 export function useBlocks() {
