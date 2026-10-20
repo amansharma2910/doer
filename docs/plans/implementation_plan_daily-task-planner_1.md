@@ -150,7 +150,7 @@ Local-first FastAPI monolith. Docker Compose on the developer machine: Postgres 
 - Backend: Python 3.13 under uv, FastAPI, SQLAlchemy 2.0 async with asyncpg, Alembic, pydantic-settings, the Anthropic SDK, `google-api-python-client` with `google-auth-oauthlib`, `cryptography` for a Fernet envelope around refresh tokens, `tenacity`, `structlog`. Tests use pytest, pytest-asyncio, `freezegun`, and `respx`.
 - Logical days are materialized rows keyed on (user, anchor date), with the day shape, capacity base, and threshold snapshotted at day open. All timestamps are `timestamptz` in UTC against a fixed account-level IANA timezone.
 - Authentication is the Google authorization code flow handled directly by FastAPI, one consent screen covering `openid`, `email`, `profile`, and `calendar.freebusy` with offline access, session carried in an HttpOnly cookie.
-- Calendar reads are on-demand `freebusy.query` calls scoped to the logical day's window, triggered at day open and by explicit refresh, with the last successful snapshot reused on failure.
+- Calendar reads are on-demand `freebusy.query` calls scoped to the logical day's window against the primary calendar, triggered at day open and by explicit refresh, with the last successful snapshot reused on failure. Note that `calendar.freebusy` does not permit enumerating the user's calendar list, which would require the broader `calendar.readonly` scope; v1 therefore reads the primary calendar only. Supporting additional calendars means letting the user name them, not discovering them.
 - Asynchronous estimation keeps its state on the task row and is retried by an in-process asyncio sweeper, with the sweep logic also exposed as an authenticated endpoint so a scheduler can drive it after deployment.
 
 Deferred to v2: hosting, CI, error reporting, push-based calendar sync, and any background worker or Redis.
@@ -367,7 +367,8 @@ Identifiers are stable; the AC column names the criterion each case proves.
 |---|---|---|
 | T-CAL-01 | Only busy start and end values are persisted; no title, description, attendee, or location field exists on the stored rows. | AC-18 |
 | T-CAL-02 | The Calendar client calls `freebusy.query` only, and no code path requests `events.list` or any endpoint returning event content. | AC-18 |
-| T-CAL-03 | A freebusy query is scoped to the logical day's window and merges intervals across all of the user's calendars. | AC-06 |
+| T-CAL-03 | A freebusy query is scoped to the logical day's window against the primary calendar, and the returned intervals are merged before subtraction. | AC-06 |
+| T-CAL-06 | Busy intervals are clipped to the day's window, so an event starting before the day began subtracts only the part inside it. | AC-06 |
 | T-CAL-04 | With the Calendar API unavailable, the last snapshot is used and the day is flagged stale when the snapshot predates day start. | AC-15 |
 | T-CAL-05 | A calendar sync failure never fails the dashboard request. | AC-15 |
 

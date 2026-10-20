@@ -61,6 +61,12 @@ class LogicalDay(Base):
     committed_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     calendar_state: Mapped[str] = mapped_column(String(16), nullable=False, default="absent")
+
+    # Last successful availability read, kept so a failed refresh degrades to
+    # stale data rather than to nothing. Only start and end instants: no event
+    # titles exist to store, because freebusy never returns them.
+    busy_snapshot: Mapped[list | None] = mapped_column(JSONB)
+    calendar_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     is_indeterminate: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     indeterminate_reason: Mapped[str | None] = mapped_column(String(32))
     is_at_risk: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

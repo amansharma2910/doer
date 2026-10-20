@@ -19,7 +19,7 @@ from doer.schemas.task import (
     TaskOut,
     TaskUpdate,
 )
-from doer.services import close_service, day_service, estimation, task_service
+from doer.services import calendar, close_service, day_service, estimation, task_service
 from doer.services.task_service import TaskRuleViolation
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
@@ -67,6 +67,8 @@ async def _resolve_day(session: AsyncSession, user: User) -> LogicalDay:
             status.HTTP_409_CONFLICT,
             "the current time falls outside your defined day",
         )
+    if calendar.is_stale(day):
+        await calendar.sync_day(session, user, day)
     return day
 
 

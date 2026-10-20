@@ -75,3 +75,5 @@ class DayOut(BaseModel):
     is_at_risk: bool
     closed_at: str | None
     verdict: str | None
+    calendar_synced_at: str | None
+    calendar_is_stale: bool
