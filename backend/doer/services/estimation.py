@@ -46,7 +46,12 @@ class EstimateOut(BaseModel):
     minutes: int = Field(ge=5, le=600)
 
 
-async def _call_model(title: str, notes: str | None, preference_kind: str) -> int:
+async def _call_model(title: str, notes: str | None, preference_kind: str) -> tuple[int, int, int]:
+    """Returns (minutes, input_tokens, output_tokens).
+
+    Token counts come back so cost is computed from what was actually billed
+    rather than from an assumption baked into a spreadsheet.
+    """
     settings = get_settings()
     detail = f"Task: {title}"
     if notes:
@@ -67,7 +72,13 @@ async def _call_model(title: str, notes: str | None, preference_kind: str) -> in
     parsed = response.parsed_output
     if parsed is None:
         raise llm.LLMUnavailable("model returned no parsable estimate")
-    return parsed.minutes
+
+    usage = getattr(response, "usage", None)
+    return (
+        parsed.minutes,
+        getattr(usage, "input_tokens", 0) if usage else 0,
+        getattr(usage, "output_tokens", 0) if usage else 0,
+    )
 
 
 async def estimate_task(session: AsyncSession, user: User, task: Task, day: LogicalDay) -> Task:
@@ -97,7 +108,9 @@ async def estimate_task(session: AsyncSession, user: User, task: Task, day: Logi
     started = utcnow()
 
     try:
-        raw_minutes = await _call_model(task.title, task.notes, task.preference_kind)
+        raw_minutes, input_tokens, output_tokens = await _call_model(
+            task.title, task.notes, task.preference_kind
+        )
     except llm.LLMUnavailable as exc:
         return await _record_failure(session, user, task, day, exc)
 
@@ -120,8 +133,8 @@ async def estimate_task(session: AsyncSession, user: User, task: Task, day: Logi
         minutes=snapped,
         raw=raw_minutes,
         cache_hit=False,
-        input_tokens=0,
-        output_tokens=0,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
         latency_ms=latency_ms,
     )
     return task

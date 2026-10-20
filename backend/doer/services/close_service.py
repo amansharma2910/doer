@@ -18,7 +18,7 @@ from doer import events
 from doer.daytime import utcnow
 from doer.models import LogicalDay, Task, User
 from doer.models.task import MAX_PRIMARIES, MIN_PRIMARIES_TO_SCORE, SUCCESS_RATIO
-from doer.services import day_service, task_service
+from doer.services import day_service, metrics, task_service
 
 
 def verdict_for(total_tasks: int, scheduled_primaries: int, completed_primaries: int) -> str:
@@ -90,6 +90,11 @@ async def close_day(session: AsyncSession, user: User, anchor: date) -> LogicalD
             "completed_minutes": sum(t.estimate_minutes or 0 for t in completed_primaries),
         },
     )
+
+    # The aggregate row is written in the same transaction as the close, so it can
+    # never describe a day that did not actually close.
+    await session.flush()
+    await metrics.roll_up(session, user, day, tasks=tasks)
     return day
 
 
