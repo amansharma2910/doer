@@ -4,6 +4,8 @@ import { Link } from "react-router-dom";
 import { api, ApiError } from "../lib/api";
 import { DayTimeline } from "../components/DayTimeline";
 import {
+  clampEndToDay,
+  dayEndClock,
   endForStart,
   findOverlap,
   firstFreeGap,
@@ -156,7 +158,13 @@ function BlocksEditor({ user }: { user: User }) {
         }),
       });
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.blocks }),
+    onSuccess: () => {
+      // Hand the form back to the suggestion logic, so it moves to the next free
+      // stretch instead of sitting on the range it just created and reporting an
+      // overlap against the user's own new block.
+      edited.current = false;
+      queryClient.invalidateQueries({ queryKey: keys.blocks });
+    },
   });
 
   const remove = useMutation({
@@ -265,13 +273,24 @@ function BlocksEditor({ user }: { user: User }) {
           </label>
 
           <label className="flex flex-col gap-1">
-            <span className="text-xs text-[var(--color-muted)]">Until</span>
+            <span className="text-xs text-[var(--color-muted)]">
+              Until{" "}
+              <span className="opacity-70">
+                (to {dayEndClock(dayStart, user.day_duration_minutes)} at the latest)
+              </span>
+            </span>
             <input
               type="time"
               value={to}
               onChange={(e) => {
                 edited.current = true;
                 setTo(e.target.value);
+              }}
+              onBlur={() => {
+                // Cap at the end of the day once the edit is finished, rather
+                // than mid-keystroke while AM/PM is still being chosen.
+                const capped = clampEndToDay(from, to, dayStart, user.day_duration_minutes);
+                if (capped) setTo(capped);
               }}
               className="border-b border-[var(--color-line)] bg-transparent pb-1 tabular-nums outline-none"
             />
@@ -310,8 +329,9 @@ function BlocksEditor({ user }: { user: User }) {
             </span>
           ) : "error" in range && range.error.kind === "past_day_end" ? (
             <span className="text-[var(--color-risk)]">
-              That ends at {range.error.endsAt}, after your day finishes at{" "}
-              {range.error.dayEndsAt}.
+              That ends at {range.error.endsAt}, past the {range.error.dayEndsAt} end
+              of your day. Anything up to {range.error.dayEndsAt} works, including
+              after midnight.
             </span>
           ) : (
             <span className="text-[var(--color-risk)]">Pick an end time after the start.</span>

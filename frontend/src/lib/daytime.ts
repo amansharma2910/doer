@@ -155,3 +155,35 @@ export function endForStart(
   const end = Math.min(start + preferredMinutes, dayDurationMinutes);
   return end > start ? offsetToClock(end, dayStart) : null;
 }
+
+/**
+ * The latest end a block may have: the moment the day itself ends.
+ */
+export function dayEndClock(dayStart: string, dayDurationMinutes: number): string {
+  return offsetToClock(dayDurationMinutes, dayStart);
+}
+
+/**
+ * Pull an end time back to the end of the day when it overruns, or null when it
+ * already fits.
+ *
+ * Applied when the field loses focus rather than on every keystroke. A time input
+ * reports a change per segment, so clamping live would rewrite "12" into the day's
+ * end before the person reached the AM that would have made it valid.
+ */
+export function clampEndToDay(
+  from: string,
+  to: string,
+  dayStart: string,
+  dayDurationMinutes: number,
+): string | null {
+  const start = clockToOffset(from, dayStart);
+  if (start >= dayDurationMinutes) return null;
+
+  const range = toOffsets(from, to, dayStart, dayDurationMinutes);
+  if ("start" in range) return null;
+
+  const end = dayEndClock(dayStart, dayDurationMinutes);
+  // Only worth clamping if it leaves an actual block behind.
+  return clockToOffset(end, dayStart) > start || dayDurationMinutes > start ? end : null;
+}

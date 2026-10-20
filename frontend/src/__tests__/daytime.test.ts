@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  clampEndToDay,
   clockToOffset,
+  dayEndClock,
   endForStart,
   findOverlap,
   firstFreeGap,
@@ -226,5 +228,57 @@ describe("a start outside the day is named as such", () => {
       start: 14 * 60 + 59,
       end: 15 * 60,
     });
+  });
+});
+
+describe("capping the end at the end of the day", () => {
+  it("reports the latest permissible end", () => {
+    expect(dayEndClock(DAY_START, DURATION)).toBe("05:00");
+    expect(dayEndClock("09:00", 8 * 60)).toBe("17:00");
+  });
+
+  it("pulls an overrunning end back to the day's end", () => {
+    // 12:00 is noon, genuinely outside a 14:00 to 05:00 day.
+    expect(clampEndToDay("22:00", "12:00", DAY_START, DURATION)).toBe("05:00");
+  });
+
+  it("leaves a block that already fits alone", () => {
+    expect(clampEndToDay("15:00", "19:00", DAY_START, DURATION)).toBeNull();
+  });
+
+  it("leaves a block crossing midnight alone", () => {
+    // The case that must survive: after midnight is inside this day, not past it.
+    expect(clampEndToDay("22:00", "00:30", DAY_START, DURATION)).toBeNull();
+    expect(clampEndToDay("23:00", "02:00", DAY_START, DURATION)).toBeNull();
+  });
+
+  it("leaves a block ending exactly at the day's end alone", () => {
+    expect(clampEndToDay("03:00", "05:00", DAY_START, DURATION)).toBeNull();
+  });
+
+  it("declines when the start is itself outside the day", () => {
+    // Capping the end cannot rescue a start that is in the gap between days.
+    expect(clampEndToDay("09:00", "12:00", DAY_START, DURATION)).toBeNull();
+  });
+
+  it("caps on an ordinary daytime shape too", () => {
+    expect(clampEndToDay("15:00", "22:00", "09:00", 8 * 60)).toBe("17:00");
+  });
+});
+
+describe("after midnight is inside a late-night day", () => {
+  it.each([
+    ["23:00", "00:30", 540, 630],
+    ["22:00", "01:00", 480, 660],
+    ["23:30", "04:00", 570, 840],
+    ["00:30", "02:00", 630, 720],
+    ["02:00", "05:00", 720, 900],
+  ])("accepts %s to %s", (from, to, start, end) => {
+    expect(toOffsets(from, to, DAY_START, DURATION)).toEqual({ start, end });
+  });
+
+  it("rejects only what genuinely falls past the end", () => {
+    const result = toOffsets("03:00", "06:00", DAY_START, DURATION);
+    expect("error" in result && result.error.kind).toBe("past_day_end");
   });
 });
