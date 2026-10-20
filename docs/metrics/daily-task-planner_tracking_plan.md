@@ -33,7 +33,7 @@ This metric directly encodes the contract the product is built around. Its known
 | Metric | Definition | Reads on |
 |---|---|---|
 | Scored-day coverage | Scored days divided by elapsed logical days, trailing 14 | Whether the instrument is used at all. A precondition for every other number here. |
-| Over-commitment rate | Share of scoreable days flagged at risk at day open, trailing 14 | Whether planning is getting more realistic. Expected to fall if the contract is working. |
+| Over-commitment rate | Share of scoreable days flagged at risk **at any point**, trailing 14 | Whether planning is getting more realistic. Expected to fall if the contract is working. Measured from a latching flag (`logical_days.ever_at_risk`) rather than the live one: the live flag clears the moment enough work is completed, so reading it at close would record `false` for most days that were in fact flagged. |
 | Estimation error | Median absolute percentage error between estimated and actual minutes, per completed task with a known actual | The secondary objective. Also the calibration baseline for a future version. |
 | Carry-forward load | Median count of tasks carried forward per day, trailing 14 | Whether commitments are being met. A rising line means the day is consistently over-subscribed regardless of what the verdict says. |
 
@@ -79,9 +79,9 @@ Naming is snake_case `object_action`. Every event carries these base properties 
 | `day_risk_flag_raised` | `committed_minutes`, `threshold_minutes`, `primary_count` | Capacity service, on the transition from not-at-risk to at-risk |
 | `day_risk_flag_cleared` | `committed_minutes`, `threshold_minutes`, `primary_count` | Capacity service, on the reverse transition |
 | `logical_day_closed` | `closed_at`, `close_trigger` (`lazy_read`, `sweep`), `days_closed_in_batch` | Day service, in the transaction guarded by the uniqueness constraint on (user, anchor date) |
-| `day_scored` | `scheduled_primary_count`, `completed_primary_count`, `completion_ratio`, `verdict` (`success`, `failure`, `neutral`, `unscheduled`), `was_at_risk`, `committed_minutes`, `completed_minutes` | Scoring service, in the same transaction as `logical_day_closed` |
+| `day_scored` | `total_task_count`, `scheduled_primary_count`, `completed_primary_count`, `completion_ratio`, `verdict` (`success`, `failure`, `neutral`, `unscheduled`), `was_at_risk`, `committed_minutes`, `completed_minutes` | Scoring service, in the same transaction as `logical_day_closed` |
 
-`day_scored` is the single most important event in this plan. The north star, three of four leading indicators, and three guardrails all derive from it.
+`day_scored` is the single most important event in this plan. The north star, three of four leading indicators, and three guardrails all derive from it. It carries `total_task_count` as well as the primary counts, because without it a replay cannot distinguish a day with no tasks at all (`unscheduled`) from one with only non-primary tasks (`neutral`).
 
 ### 3.3 Tasks
 
@@ -98,11 +98,11 @@ Naming is snake_case `object_action`. Every event carries these base properties 
 | `task_carried_forward` | `task_id`, `from_anchor_date`, `to_anchor_date`, `carry_forward_count`, `is_primary` | Day close transaction, once per carried task |
 | `task_promoted` | `task_id`, `trigger` (`user`) | Task service, on non-primary to primary |
 | `task_demoted` | `task_id`, `trigger` (`user`, `carry_forward_precedence`) | Task service, and the day close transaction when precedence demotes an excess pre-assigned task |
-| `task_updated` | `task_id`, `fields_changed` (array) | Task service update, excluding estimate-only changes |
+| `task_updated` | `task_id`, `fields_changed` (array) | Task service update, excluding estimate-only changes, which have their own event |
 | `task_deleted` | `task_id`, `was_primary`, `carry_forward_count` | Task service delete, incomplete tasks only |
 | `task_delete_rejected` | `task_id`, `reason` (`completed_immutable`) | Task service delete guard |
 | `task_reordered` | `task_id`, `preference_type`, `from_index`, `to_index` | Task service reorder endpoint |
-| `primary_cap_rejected` | `attempted_source` (`chat`, `manual`, `api`), `remedy_offered` | Task service create guard, on the 5th primary |
+| `primary_cap_rejected` | `attempted_source` (`chat`, `manual`), `remedy_offered` | Task service create guard, on the 5th primary |
 
 ### 3.4 Assistant
 
@@ -163,6 +163,14 @@ At the review, answer these in order:
 5. **Is estimation improving or static?** Estimation error trend. A flat line over 30 days means the calibration opportunity in the secondary objective is not materializing from a fixed prompt.
 
 The verdict is written back into this file, status moves to `reviewed`, and roadmap-mode updates Business Objective Coverage. This file never edits docs/roadmap.md directly.
+
+## 6.1 Implementation Notes (added 2026-10-21)
+
+Recorded after the implementation so the plan and the code do not drift apart silently.
+
+- **`task_started` is optional in practice.** The event and the endpoint exist, but nothing forces a user to start a task before completing it. `actual_minutes` is therefore populated only for tasks that were explicitly started, and the estimation-error indicator is computed over that subset. If the subset stays small, that indicator is the first thing to distrust at review time.
+- **`inference_cost_usd` is zero for unpriced models.** `cost_for` returns zero rather than raising when a model is not in its price table, so pointing `ESTIMATION_MODEL` or `CHAT_MODEL` at an unlisted model silently zeroes the cost rollup instead of failing loudly. Prices are in `backend/doer/services/metrics.py`.
+- **Lazy close is bounded at 400 days.** Both `close_elapsed_days` and `elapsed_anchor_dates` stop after 400 iterations to survive a misconfigured clock. A gap longer than that would close partially and silently.
 
 ## 7. Constraints on Implementation
 

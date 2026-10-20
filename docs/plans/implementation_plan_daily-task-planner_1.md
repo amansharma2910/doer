@@ -59,7 +59,7 @@ UX principles: the app never nags. Over-commitment is communicated by color, not
 - Tasks carry a preference type and are placed into matching blocks when ordering the day.
 
 **Tasks**
-- Task CRUD for incomplete tasks: create, read, update (title, notes, estimate override, preference type, primary flag, target day), delete.
+- Task CRUD for incomplete tasks: create, read, update (title, notes, estimate override, preference type), delete. The primary flag has its own endpoint because it is a contract change rather than an edit. Moving a task to a different day is not supported: carry-forward is the only way a task changes day, which keeps the carry-forward count meaningful.
 - A task is either primary or non-primary. At most 4 primary tasks may be assigned to a given logical day. Attempting a fifth is blocked with an inline message offering to demote an existing primary or add the new task as non-primary.
 - Non-primary tasks are unlimited and are tracked and logged, but never counted toward the 75% verdict.
 - Tasks group under their preference block and are user-orderable within the day by drag, backed by a persisted sort index and a reorder endpoint. New tasks append to the end of their block. Reordering is a user action only; the assistant never re-sequences a day in v1.
@@ -146,8 +146,8 @@ UX principles: the app never nags. Over-commitment is communicated by color, not
 
 Local-first FastAPI monolith. Docker Compose on the developer machine: Postgres 17 in a container, FastAPI under uvicorn, and a Vite dev server. A second build target produces the single container in which FastAPI serves the built SPA, maintained and smoke-tested from the first milestone so that deploying later is configuration rather than a rewrite.
 
-- Frontend: Vite, React, TypeScript, React Router, Tailwind, TanStack Query, `@dnd-kit` for drag reordering, `zod`, `date-fns`. The heatmap is a hand-built CSS grid, not a library.
-- Backend: Python 3.13 under uv, FastAPI, SQLAlchemy 2.0 async with asyncpg, Alembic, pydantic-settings, the Anthropic SDK, `google-api-python-client` with `google-auth-oauthlib`, `cryptography` for a Fernet envelope around refresh tokens, `tenacity`, `structlog`. Tests use pytest, pytest-asyncio, `freezegun`, and `respx`.
+- Frontend: Vite, React, TypeScript, React Router, Tailwind, TanStack Query, and `@dnd-kit` for drag reordering. The heatmap is a hand-built CSS grid, not a library.
+- Backend: Python 3.13 under uv, FastAPI, SQLAlchemy 2.0 async with asyncpg, Alembic, pydantic-settings, the Anthropic SDK, `httpx` for Google's OAuth and FreeBusy endpoints, `cryptography` for a Fernet envelope around refresh tokens, and `structlog`. Tests use pytest, pytest-asyncio, and `respx`.
 - Logical days are materialized rows keyed on (user, anchor date), with the day shape, capacity base, and threshold snapshotted at day open. All timestamps are `timestamptz` in UTC against a fixed account-level IANA timezone.
 - Authentication is the Google authorization code flow handled directly by FastAPI, one consent screen covering `openid`, `email`, `profile`, and `calendar.freebusy` with offline access, session carried in an HttpOnly cookie.
 - Calendar reads are on-demand `freebusy.query` calls scoped to the logical day's window against the primary calendar, triggered at day open and by explicit refresh, with the last successful snapshot reused on failure. Note that `calendar.freebusy` does not permit enumerating the user's calendar list, which would require the broader `calendar.readonly` scope; v1 therefore reads the primary calendar only. Supporting additional calendars means letting the user name them, not discovering them.
@@ -272,11 +272,11 @@ Plan §7 items 1 to 3 (21 consecutive days of use, a non-trivial mix of verdicts
 ### 11.2 Evaluation Criteria
 
 - **Pass bar for v1:** every criterion AC-01 to AC-21 has at least one automated test that fails when the behavior breaks. Line coverage is deliberately not tracked, to keep tests tied to the product contract rather than to lines executed.
-- **Test depth:** integration-heavy. The majority of tests exercise the API against a real Postgres (compose service or testcontainer), because the uniqueness constraint on (user, anchor date), transactional carry-forward, and append-only enforcement cannot be proven against a mocked database. Pure functions (capacity arithmetic, bucket snapping, verdict calculation) are unit-tested directly.
+- **Test depth:** integration-heavy. Tests exercise the service layer and the HTTP API against a real Postgres (compose service or testcontainer), because the uniqueness constraint on (user, anchor date), transactional carry-forward, and append-only enforcement cannot be proven against a mocked database. Pure functions (capacity arithmetic, bucket snapping, verdict calculation) are unit-tested directly.
 - **LLM calls:** mocked by default using recorded responses, so the default suite is deterministic, offline, and free. A separately tagged live suite, excluded from the default run, asserts loose properties against the real API (a known phrase parses to a task; the returned estimate is a valid bucket) to catch prompt and API drift.
-- **Time control:** every time-dependent test pins the clock with freezegun and runs against an explicit account timezone fixture. No test may depend on the machine's local time or on the real current date.
+- **Time control:** every time-dependent test passes an explicit instant and an explicit account timezone. No test may depend on the machine's local time, its timezone, or the real current date. Explicit arguments are preferred to freezing a global clock, because the functions under test already take the instant as a parameter.
 - **Determinism:** the suite must pass when run in any order and must not depend on a previously seeded database. Each test owns its fixtures.
-- **Execution:** the suite runs inside the compose environment with a single documented command, with no dependency on a deployed environment.
+- **Execution:** `cd backend && uv run pytest`, run on the host against the Postgres that compose publishes on 5432. The suite creates and migrates its own `doer_test` database and never touches the development one. It has no dependency on a deployed environment.
 - **Manual pass:** `docs/user_testing_documentation.md` is walked end to end before v1 is called done, covering the judgment calls automation cannot make, principally whether the at-risk signal reads as quiet rather than alarming.
 
 ### 11.3 Automated Test Cases

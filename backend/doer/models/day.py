@@ -71,6 +71,11 @@ class LogicalDay(Base):
     indeterminate_reason: Mapped[str | None] = mapped_column(String(32))
     is_at_risk: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
+    # Latching companion to is_at_risk. The over-commitment rate asks whether a
+    # day was ever flagged, and the live flag clears as soon as work is completed,
+    # so reading it at close would record false for most days that were flagged.
+    ever_at_risk: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     verdict: Mapped[str | None] = mapped_column(String(16))
     scheduled_primary_count: Mapped[int | None] = mapped_column(Integer)

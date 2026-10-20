@@ -38,7 +38,9 @@ def verdict_for(total_tasks: int, scheduled_primaries: int, completed_primaries:
     return "success" if ratio >= SUCCESS_RATIO else "failure"
 
 
-async def close_day(session: AsyncSession, user: User, anchor: date) -> LogicalDay | None:
+async def close_day(
+    session: AsyncSession, user: User, anchor: date, *, batch_size: int = 1
+) -> LogicalDay | None:
     """Close one day. Safe to call repeatedly and concurrently."""
     locked = await session.execute(
         select(LogicalDay)
@@ -72,7 +74,11 @@ async def close_day(session: AsyncSession, user: User, anchor: date) -> LogicalD
         name="logical_day_closed",
         logical_day_id=day.id,
         anchor_date=anchor,
-        properties={"closed_at": day.closed_at, "close_trigger": "lazy_read"},
+        properties={
+            "closed_at": day.closed_at,
+            "close_trigger": "lazy_read",
+            "days_closed_in_batch": batch_size,
+        },
     )
     events.record(
         session,
@@ -81,6 +87,7 @@ async def close_day(session: AsyncSession, user: User, anchor: date) -> LogicalD
         logical_day_id=day.id,
         anchor_date=anchor,
         properties={
+            "total_task_count": len(tasks),
             "scheduled_primary_count": len(primaries),
             "completed_primary_count": len(completed_primaries),
             "completion_ratio": day.completion_ratio,
@@ -123,6 +130,7 @@ async def _carry_forward(
         # Oldest pre-assigned tasks keep whatever slots remain; the rest demote.
         for demoted in sorted(pre_assigned, key=lambda t: t.created_at)[slots_left:]:
             demoted.is_primary = False
+            demoted.carry_forward_demoted = True
             events.record(
                 session,
                 user_id=user.id,
@@ -186,7 +194,7 @@ async def close_elapsed_days(
         if anchor is None:
             return closed
 
-        day = await close_day(session, user, anchor)
+        day = await close_day(session, user, anchor, batch_size=len(closed) + 1)
         if day is None or not day.is_closed:
             return closed
         closed.append(day)

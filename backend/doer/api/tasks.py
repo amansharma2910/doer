@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from doer.api.deps import current_user
+from doer.config import get_settings
 from doer.db import get_session
 from doer.models import LogicalDay, Task, User
 from doer.schemas.task import (
@@ -42,6 +43,7 @@ def serialize(task: Task, day: LogicalDay) -> TaskOut:
         completed_at=task.completed_at.isoformat() if task.completed_at else None,
         actual_minutes=task.actual_minutes,
         carry_forward_count=task.carry_forward_count,
+        carry_forward_demoted=task.carry_forward_demoted,
         is_complete=task.is_complete,
     )
 
@@ -119,9 +121,10 @@ async def create(
     # The task is returned immediately with a pending estimate; the model call
     # resolves it in place. The sweeper is the durability net if this attempt is
     # lost to a restart.
-    task_id = task.id
-    await session.commit()
-    asyncio.create_task(estimation.estimate_in_background(task_id))  # noqa: RUF006
+    if get_settings().background_estimation_enabled:
+        task_id = task.id
+        await session.commit()
+        asyncio.create_task(estimation.estimate_in_background(task_id))  # noqa: RUF006
 
     return serialize(task, day)
 
@@ -137,12 +140,18 @@ async def update(
     if task.is_complete:
         raise HTTPException(status.HTTP_409_CONFLICT, "completed tasks cannot be edited")
 
-    if payload.title is not None:
+    changed: list[str] = []
+    if payload.title is not None and payload.title != task.title:
         task.title = payload.title
-    if payload.notes is not None:
+        changed.append("title")
+    if payload.notes is not None and payload.notes != task.notes:
         task.notes = payload.notes
-    if payload.preference_kind is not None:
+        changed.append("notes")
+    if payload.preference_kind is not None and payload.preference_kind != task.preference_kind:
         task.preference_kind = payload.preference_kind
+        changed.append("preference_kind")
+    await task_service.record_update(session, user, task, day, changed)
+
     if payload.estimate_minutes is not None:
         await task_service.set_estimate(
             session, user, task, day, minutes=payload.estimate_minutes, source="user"
@@ -164,6 +173,18 @@ async def delete(
     except TaskRuleViolation as exc:
         raise rule_error(exc) from exc
     await task_service.recompute_capacity(session, user, day)
+
+
+@router.post("/{task_id}/start")
+async def start(
+    task_id: uuid.UUID,
+    user: User = Depends(current_user),
+    session: AsyncSession = Depends(get_session),
+) -> TaskOut:
+    """Begin a task, so its actual duration can be measured against the estimate."""
+    task, day = await _load(session, user, task_id)
+    await task_service.start_task(session, user, task, day)
+    return serialize(task, day)
 
 
 @router.post("/{task_id}/complete")

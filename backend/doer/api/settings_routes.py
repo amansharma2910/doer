@@ -89,7 +89,7 @@ async def create_block(
 ) -> BlockOut:
     if payload.end_offset_minutes > user.day_duration_minutes:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             f"block ends at minute {payload.end_offset_minutes} but the day is only "
             f"{user.day_duration_minutes} minutes long",
         )

@@ -80,6 +80,11 @@ class Task(Base):
 
     carry_forward_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
+    # Set when carry-forward precedence took this task's primary slot. The plan
+    # requires the user be told which tasks were demoted, and an event alone is
+    # not a channel the interface can read.
+    carry_forward_demoted: Mapped[bool] = mapped_column(nullable=False, default=False)
+
     created_at: Mapped[datetime] = created_at_col()
     updated_at: Mapped[datetime] = updated_at_col()
 

@@ -23,23 +23,25 @@ pytestmark = [
 
 class TestEstimationIsSane:
     async def test_a_short_errand_estimates_small(self):
-        minutes = await estimation._call_model("call the bank", None, "personal")
+        minutes, _, _ = await estimation._call_model("call the bank", None, "personal")
         assert MIN_ESTIMATE_MINUTES <= minutes <= 90
 
     async def test_a_substantial_task_estimates_larger(self):
-        minutes = await estimation._call_model(
+        minutes, _, _ = await estimation._call_model(
             "write the quarterly investor update from scratch", None, "deep_work"
         )
         assert minutes >= 45
 
     async def test_the_result_is_always_within_the_clamp_range(self):
-        minutes = await estimation._call_model("reorganize the entire garage", None, "personal")
+        minutes, _, _ = await estimation._call_model(
+            "reorganize the entire garage", None, "personal"
+        )
         assert MIN_ESTIMATE_MINUTES <= minutes <= MAX_ESTIMATE_MINUTES
 
     async def test_the_model_returns_bucket_values(self):
         """Not load-bearing, since we snap anyway, but drift here means the prompt
         has stopped landing."""
-        minutes = await estimation._call_model("review two pull requests", None, "deep_work")
+        minutes, _, _ = await estimation._call_model("review two pull requests", None, "deep_work")
         assert minutes % BUCKET_MINUTES == 0
 
     def test_the_configured_model_is_haiku(self):

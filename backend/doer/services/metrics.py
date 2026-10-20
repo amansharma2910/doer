@@ -97,7 +97,7 @@ async def roll_up(
         busy_minutes_subtracted=day.busy_minutes_subtracted,
         threshold_minutes=day.threshold_minutes,
         committed_minutes=day.committed_minutes,
-        was_at_risk=day.is_at_risk,
+        was_at_risk=day.ever_at_risk,
         is_indeterminate=day.is_indeterminate,
         verdict=day.verdict,
         completion_ratio=day.completion_ratio,
@@ -147,5 +147,7 @@ async def verdict_from_events(session: AsyncSession, user: User, anchor) -> str 
 
     scheduled = event.properties["scheduled_primary_count"]
     completed = event.properties["completed_primary_count"]
-    total = scheduled if scheduled else 0
-    return verdict_for(max(total, scheduled), scheduled, completed)
+    # Older events predate total_task_count; fall back to the primary count, which
+    # is correct for every day that has at least one primary.
+    total = event.properties.get("total_task_count", scheduled)
+    return verdict_for(total, scheduled, completed)

@@ -39,6 +39,7 @@ class DailyMetrics(Base):
     busy_minutes_subtracted: Mapped[int | None] = mapped_column(Integer)
     threshold_minutes: Mapped[int | None] = mapped_column(Integer)
     committed_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # True if the day was flagged at any point, not only at close.
     was_at_risk: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_indeterminate: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 

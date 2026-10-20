@@ -109,9 +109,9 @@ export function AddTask({ primariesUsed }: { primariesUsed: number }) {
 /** The API attaches a remedy to contract refusals so the interface can offer a way forward. */
 export function asRuleError(error: unknown): RuleError | null {
   if (!(error instanceof ApiError)) return null;
-  const detail = error.message as unknown;
+  const { detail } = error;
   if (typeof detail === "object" && detail !== null && "code" in detail) {
     return detail as RuleError;
   }
-  return { message: String(error.message), code: "unknown", remedy: null };
+  return { message: error.message, code: "unknown", remedy: null };
 }

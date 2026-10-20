@@ -19,11 +19,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from doer import events
 from doer.daytime import utcnow
+from doer.logging import get_logger
 from doer.models import LogicalDay, User
 from doer.services import capacity, task_service
 from doer.services.token_store import CalendarUnavailable, access_token_for
 
 FREEBUSY_ENDPOINT = "https://www.googleapis.com/calendar/v3/freeBusy"
+
+log = get_logger(__name__)
 
 
 async def fetch_busy(
@@ -41,7 +44,9 @@ async def fetch_busy(
         )
 
     if response.status_code != 200:
-        raise CalendarUnavailable(f"freebusy returned {response.status_code}")
+        error = CalendarUnavailable(f"freebusy returned {response.status_code}")
+        error.http_status = response.status_code
+        raise error
 
     payload = response.json()
     intervals: list[tuple[datetime, datetime]] = []
@@ -93,8 +98,15 @@ async def sync_day(
             anchor_date=day.anchor_date,
             properties={
                 "error_class": type(exc).__name__,
+                "http_status": getattr(exc, "http_status", None),
                 "fell_back_to": "cache" if day.busy_snapshot else "none",
             },
+        )
+        log.warning(
+            "calendar.query_failed",
+            anchor_date=str(day.anchor_date),
+            error=type(exc).__name__,
+            has_snapshot=bool(day.busy_snapshot),
         )
         # Keep using the last good snapshot, but say it is stale.
         return await _degrade(

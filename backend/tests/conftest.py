@@ -16,6 +16,11 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent
 
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://doer:doer@localhost:5432/doer_test")
 os.environ.setdefault("FERNET_KEY", "Q2hhbmdlTWVDaGFuZ2VNZUNoYW5nZU1lQ2hhbmdlTWU=")
+# A fire-and-forget estimation task outlives the fixtures that own its rows and
+# fails during teardown, which showed up as an intermittent error. Tests drive
+# estimation explicitly instead.
+os.environ.setdefault("BACKGROUND_ESTIMATION_ENABLED", "false")
+os.environ.setdefault("SWEEPER_ENABLED", "false")
 
 import asyncpg  # noqa: E402
 import pytest  # noqa: E402

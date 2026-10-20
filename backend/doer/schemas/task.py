@@ -53,4 +53,5 @@ class TaskOut(BaseModel):
     completed_at: str | None
     actual_minutes: int | None
     carry_forward_count: int
+    carry_forward_demoted: bool
     is_complete: bool

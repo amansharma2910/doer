@@ -118,6 +118,48 @@ async def create_task(
     return task
 
 
+async def start_task(session: AsyncSession, user: User, task: Task, day: LogicalDay) -> Task:
+    """Mark a task as started.
+
+    Optional, but it is the only way actual_minutes is ever populated, and the
+    estimation-error indicator in the tracking plan has nothing to measure without
+    it.
+    """
+    if task.started_at is not None or task.is_complete:
+        return task
+
+    task.started_at = utcnow()
+    events.record(
+        session,
+        user_id=user.id,
+        name="task_started",
+        logical_day_id=day.id,
+        anchor_date=day.anchor_date,
+        properties={"task_id": task.id, "started_at": task.started_at},
+    )
+    return task
+
+
+async def record_update(
+    session: AsyncSession, user: User, task: Task, day: LogicalDay, fields: list[str]
+) -> None:
+    """Emit task_updated for non-estimate field changes.
+
+    Estimate changes have their own event, so they are excluded here rather than
+    double-counted.
+    """
+    if not fields:
+        return
+    events.record(
+        session,
+        user_id=user.id,
+        name="task_updated",
+        logical_day_id=day.id,
+        anchor_date=day.anchor_date,
+        properties={"task_id": task.id, "fields_changed": fields},
+    )
+
+
 async def complete_task(session: AsyncSession, user: User, task: Task, day: LogicalDay) -> Task:
     if task.is_complete:
         return task
@@ -242,6 +284,8 @@ async def set_primary(
             )
 
     task.is_primary = primary
+    if primary:
+        task.carry_forward_demoted = False
     events.record(
         session,
         user_id=user.id,
@@ -357,6 +401,8 @@ async def recompute_capacity(
     day.is_indeterminate = result.is_indeterminate
     day.indeterminate_reason = result.indeterminate_reason
     day.is_at_risk = result.is_at_risk
+    if result.is_at_risk:
+        day.ever_at_risk = True
     if calendar_state is not None:
         day.calendar_state = calendar_state
 

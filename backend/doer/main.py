@@ -15,7 +15,10 @@ from fastapi.staticfiles import StaticFiles
 
 from doer.api import assistant_routes, auth, days, settings_routes, tasks
 from doer.config import get_settings
+from doer.logging import configure, get_logger
 from doer.services import estimation
+
+log = get_logger(__name__)
 
 
 async def _sweeper() -> None:
@@ -29,8 +32,12 @@ async def _sweeper() -> None:
     interval = get_settings().sweeper_interval_seconds
     while True:
         await asyncio.sleep(interval)
-        with contextlib.suppress(Exception):
-            await estimation.sweep()
+        try:
+            swept = await estimation.sweep()
+            if swept:
+                log.info("estimation.sweep", retried=swept)
+        except Exception as exc:  # noqa: BLE001 - the loop must survive anything
+            log.warning("estimation.sweep_failed", error=type(exc).__name__, detail=str(exc))
 
 
 @asynccontextmanager
@@ -48,6 +55,7 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    configure()
     settings = get_settings()
     app = FastAPI(title="Doer", version="0.1.0", lifespan=lifespan)
 

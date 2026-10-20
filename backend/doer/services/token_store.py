@@ -13,7 +13,13 @@ from doer.services import google_oauth
 
 
 class CalendarUnavailable(RuntimeError):
-    """The stored grant can no longer produce an access token."""
+    """The stored grant can no longer produce an access token, or the API refused.
+
+    `http_status` is set when the failure came from an HTTP response, so the
+    tracking plan's calendar_query_failed event can record it.
+    """
+
+    http_status: int | None = None
 
 
 async def get_token(session: AsyncSession, user: User) -> OAuthToken | None:

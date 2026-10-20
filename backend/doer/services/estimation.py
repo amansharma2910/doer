@@ -24,10 +24,13 @@ from doer import events
 from doer.config import get_settings
 from doer.daytime import utcnow
 from doer.db import SessionLocal
+from doer.logging import get_logger
 from doer.models import LogicalDay, Task, User
 from doer.models.cache import EstimateCache, normalize
-from doer.models.task import snap_to_bucket
+from doer.models.task import MAX_ESTIMATE_MINUTES, MIN_ESTIMATE_MINUTES, snap_to_bucket
 from doer.services import llm, task_service
+
+log = get_logger(__name__)
 
 SYSTEM_PROMPT = """You estimate how long a single task will take one focused person.
 
@@ -172,7 +175,14 @@ async def _apply(
             "estimate_minutes": snapped,
             "raw_model_minutes": raw,
             "was_snapped": snapped != raw,
-            "was_clamped": raw < 15 or raw > 480,
+            "was_clamped": raw < MIN_ESTIMATE_MINUTES or raw > MAX_ESTIMATE_MINUTES,
+            "clamp_direction": (
+                "up"
+                if raw < MIN_ESTIMATE_MINUTES
+                else "down"
+                if raw > MAX_ESTIMATE_MINUTES
+                else None
+            ),
             "model": get_settings().estimation_model,
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
@@ -238,8 +248,14 @@ async def estimate_in_background(task_id: uuid.UUID) -> None:
             await estimate_task(session, user, task, day)
             await task_service.recompute_capacity(session, user, day)
             await session.commit()
-        except Exception:
+        except Exception as exc:  # noqa: BLE001 - detached task, nothing to raise to
             await session.rollback()
+            log.warning(
+                "estimation.background_failed",
+                task_id=str(task_id),
+                error=type(exc).__name__,
+                detail=str(exc),
+            )
 
 
 async def sweep() -> int:

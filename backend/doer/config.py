@@ -27,6 +27,9 @@ class Settings(BaseSettings):
 
     # Estimation sweeper
     sweeper_enabled: bool = True
+    # Fire-and-forget estimation on task creation. Disabled in tests so a detached
+    # task cannot outlive the fixtures that own its database rows.
+    background_estimation_enabled: bool = True
     sweeper_interval_seconds: int = 60
     estimation_max_attempts: int = 3
 
