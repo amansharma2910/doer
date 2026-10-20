@@ -47,18 +47,35 @@ export function AddTask({ primariesUsed }: { primariesUsed: number }) {
           setOpen(true);
         }}
         aria-label="Add a task"
-        className="fixed bottom-8 right-8 h-11 w-11 rounded-full border border-[var(--color-line)]
-                   bg-[var(--color-paper)] text-lg leading-none shadow-sm
-                   transition-colors hover:bg-black/[0.03] dark:hover:bg-white/[0.05]"
+        className="fixed bottom-8 right-8 flex h-11 w-11 items-center justify-center
+                   rounded-full border border-[var(--color-line)] bg-[var(--color-paper)]
+                   shadow-sm transition-colors hover:bg-black/[0.03] dark:hover:bg-white/[0.05]"
       >
-        +
+        {/* Drawn rather than typed. A "+" glyph sits on the font's math axis, which
+            leaves it a pixel or two below the centre of the circle, and the offset
+            varies by font. */}
+        <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" className="h-4 w-4">
+          <path
+            d="M8 3.5v9M3.5 8h9"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+          />
+        </svg>
       </button>
     );
   }
 
+  // Floats in the same band the plus button occupies rather than sitting flush
+  // against the bottom edge, so the panel reads as part of the centred column
+  // instead of a full-width bar welded to the window.
   return (
-    <div className="fixed inset-x-0 bottom-0 border-t border-[var(--color-line)] bg-[var(--color-paper)] p-6">
-      <form onSubmit={submit} className="mx-auto max-w-2xl space-y-3">
+    <div className="fixed inset-x-0 bottom-8 px-6">
+      <form
+        onSubmit={submit}
+        className="mx-auto max-w-2xl space-y-3 rounded-xl border border-[var(--color-line)]
+                   bg-[var(--color-paper)] p-5 shadow-md"
+      >
         <input
           autoFocus
           value={title}

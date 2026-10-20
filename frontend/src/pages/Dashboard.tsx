@@ -21,8 +21,10 @@ export function Dashboard({ user }: { user: User }) {
   const done = tasks.filter((t) => t.is_complete);
   const primariesUsed = tasks.filter((t) => t.is_primary).length;
 
+  // Bottom padding clears the add-task panel, which now floats 2rem above the
+  // bottom edge rather than sitting flush against it.
   return (
-    <div className="mx-auto max-w-2xl px-6 pb-32 pt-12">
+    <div className="mx-auto max-w-2xl px-6 pb-40 pt-12">
       <header className="flex items-baseline justify-between">
         <h1 className="text-xl font-medium tracking-tight">Doer</h1>
         <nav className="flex items-center gap-4 text-xs text-[var(--color-muted)]">
