@@ -21,6 +21,9 @@ node_modules/
 dist/
 .vite/
 *.tsbuildinfo
+# No leading slash: matches at any depth, so it covers frontend/.pnpm-store and
+# any future workspace package.
+.pnpm-store/
 
 # Docker / data
 postgres-data/

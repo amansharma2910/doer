@@ -47,6 +47,12 @@ services:
     volumes:
       - ./frontend:/web
       - doer-web-modules:/web/node_modules
+      # pnpm cannot hardlink from the bind-mounted project root into its home
+      # store, so it falls back to <project>/.pnpm-store. Without this volume that
+      # path resolves to frontend/.pnpm-store on the host and 122 MB of package
+      # store gets committed: see
+      # docs/fixes/fix_plan_pnpm-store-committed-to-history.md.
+      - doer-web-store:/web/.pnpm-store
 
   # The suite drops and re-migrates the schema it is pointed at, so it gets its
   # own service rather than borrowing the api container, which carries the
@@ -86,3 +92,4 @@ services:
 volumes:
   doer-pgdata:
   doer-web-modules:
+  doer-web-store:
