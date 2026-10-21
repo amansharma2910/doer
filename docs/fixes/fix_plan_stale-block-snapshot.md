@@ -40,7 +40,7 @@ can be reached. The at-risk signal is the entire over-commitment mechanism (no
 modal, no alert, no nagging), and an indeterminate day emits none of it.
 
 The nudge also names a remedy that does nothing today, which this repository has
-already treated as a defect class in commit `1b9e382`, "an unreachable remedy".
+already treated as a defect class in commit `9a2e6fd`, "an unreachable remedy".
 
 Measurement impact: the tracking plan's north star is the rolling 7 day success
 rate, and a day with a zero threshold contributes no capacity verdict. The first

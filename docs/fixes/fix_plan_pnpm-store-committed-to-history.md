@@ -21,14 +21,17 @@ until the creation site is fixed.
 `frontend/.pnpm-store/` is tracked in git. It holds 7,863 files and 122 MB on
 disk, which is 7,863 of the 7,976 files tracked in the entire repository, or
 98.6% of them. Measured against the object graph, the store accounts for 8,449 of
-8,933 objects and 27.63 MB of the 29.3 MB packfile, which is 98.1% of all
-repository bytes. Everything that is not the store comes to 484 objects and
-0.53 MB.
+8,933 objects and 98.1% of all repository bytes. The packfile measured 28.16 MiB
+(29.5 MB) before the rewrite, of which the store was 27.63 MB. Everything that is
+not the store comes to 484 objects and 0.53 MB.
 
-It entered in two commits, both on 2026-10-21:
+It entered in two commits, both on 2026-10-21. Both SHAs below are pre-rewrite
+and no longer resolve; the current equivalents are given alongside:
 
-- `a816af6` "M5: dashboard, chat, heatmap, and settings" added 7,382 store files
-- `cd13e16` "Close the remaining coverage and contract gaps" added 481 more
+- `a816af6`, now `6ba6717`, "M5: dashboard, chat, heatmap, and settings" added
+  7,382 store files
+- `cd13e16`, now `9480a40`, "Close the remaining coverage and contract gaps"
+  added 481 more
 
 Both are pure additions to the store path, with no modifications or deletions.
 
@@ -125,8 +128,9 @@ dist/
 ```
 
 There is no `.pnpm-store` entry and no `frontend/.gitignore`.
-`git check-ignore -v frontend/.pnpm-store/v10/index` exits 1, confirming the path
-was never ignored. The list enumerates artifacts the author had anticipated, so a
+At the time of the defect, `git check-ignore -v frontend/.pnpm-store/v10/index`
+exited 1, confirming the path was never ignored. It exits 0 now and names
+`.gitignore:26`, because this fix added that line. The list enumerates artifacts the author had anticipated, so a
 cache directory that had not been seen before passed straight through a blanket
 `git add`.
 
@@ -202,8 +206,8 @@ Low on the code, moderate on the coordination.
   zero hits. There is no CI. No `package.json` script references it.
 - **The Docker build cannot regress.** `pnpm install --frozen-lockfile` runs at
   `Dockerfile:26` with only `package.json` and `pnpm-lock.yaml` present; the
-  store is copied in at line 27, after the install it could have served. Removing
-  it strictly reduces context size.
+  store was copied in at line 27, after the install it could have served.
+  Removing it strictly reduced context size.
 - **The store was never a usable cache anyway.** It holds 121 of the 188 packages
   in the lockfile, and every missing entry is a foreign-platform optional binary.
   It could not have satisfied a `--frozen-lockfile` install on any platform
@@ -216,11 +220,13 @@ Low on the code, moderate on the coordination.
   Zero hits. Coverage was proven rather than sampled: the object graph contains
   only two distinct store trees, and HEAD's tree is the strict superset of the
   other.
-- **Coordination is the real risk.** Every commit SHA changes. Anyone holding a
-  clone must re-clone or `git reset --hard origin/main`; a plain `git pull` will
-  attempt a merge and reintroduce the old objects. Mitigated here by the repo
-  having a single branch, 22 commits, a clean tree, local equal to origin, and
-  one contributor.
+- **Coordination is the real risk.** 17 of the 22 commits were rewritten and
+  have new SHAs. `filter-repo` rewrites from the first affected commit forward,
+  so the five commits preceding M5 kept theirs (`c2bf968`, `1843e55`, `5853ab0`,
+  `0bfd32d`, `877a29b` all still resolve). Anyone holding a clone must re-clone
+  or `git reset --hard origin/main`; a plain `git pull` will attempt a merge and
+  reintroduce the old objects. Mitigated here by the repo having a single branch,
+  22 commits, a clean tree, local equal to origin, and one contributor.
 - **GitHub retains unreachable objects** addressable by SHA for a period after a
   force-push, so the remote size will not drop immediately. Since the content is
   public npm tarballs with no secrets, this is a cosmetic lag and not an
@@ -228,30 +234,54 @@ Low on the code, moderate on the coordination.
 
 ## 7. Test Plan
 
-Run after the rewrite, before and after the force-push as marked.
+Recorded outcomes, measured at `ddd87af`. Counts include the two commits this fix
+itself added, so they are stated as observed rather than as the pre-fix
+predictions they started as.
 
-1. **Nothing tracked.** `git ls-files | grep -c pnpm-store` returns 0, and
-   `git ls-files | wc -l` returns 113 (down from 7,976).
-2. **Nothing reachable, the real check.**
+1. **Nothing tracked.** `git ls-files | grep -c 'frontend/\.pnpm-store/'` returns
+   0 (down from 7,863). Note that a bare `grep -c pnpm-store` returns 1, matching
+   this document's own filename, which is why the path-anchored form is the
+   correct check.
+2. **Nothing reachable, the real check.** PASS.
    `git rev-list --objects --all --reflog | grep -c 'frontend/\.pnpm-store'`
    returns 0. This covers every ref and the reflog, not just HEAD.
-3. **Refs are gone.** `git show-ref | grep -c 'refs/original'` returns 0 and
-   `git tag | grep -c pre-trailer-strip` returns 0.
-4. **Size actually dropped.** `git count-objects -vH` reports `size-pack` in low
-   single-digit MB, well under the starting 29.3 MB.
-5. **History shape preserved.** `git rev-list --count HEAD` returns 22, and
-   `git log --oneline` shows the same 22 subjects in the same order.
-6. **Non-store content survived.** `frontend/package.json` still contains
-   `vitest` and `packageManager`, `docs/roadmap.md` is present, and
-   `frontend/pnpm-lock.yaml` hashes identically to the pre-rewrite blob.
-7. **Build still works.** `pnpm install --frozen-lockfile` succeeds in
-   `frontend/` against the global store, and `pnpm build` produces `dist/`.
-8. **Prevention holds.** `git check-ignore -v frontend/.pnpm-store` exits 0 and
-   names the new `.gitignore` line. After `docker compose up`, `ls frontend/` shows
-   no `.pnpm-store` directory on the host.
-9. **Remote is clean.** After the force-push, a fresh
-   `git clone https://github.com/amansharma2910/doer.git` into a scratch directory
-   has a `.git` in low single-digit MB and 113 tracked files.
+3. **Refs are gone.** PASS. `git show-ref | grep -c 'refs/original'` returns 0
+   and `git tag` is empty.
+4. **Size actually dropped.** PASS, and by more than predicted. `size-pack` is
+   379.04 KiB, against a predicted low single-digit MB and a starting
+   28.16 MiB.
+5. **History shape preserved.** PASS. The 22 original commits are intact with
+   identical subjects in identical order; `git rev-list --count HEAD` returns 24,
+   the 22 plus `88d5eb4` and `ddd87af`.
+6. **Non-store content survived.** PASS. `frontend/pnpm-lock.yaml` has blob ID
+   `56bc7186548529e81fc550ce65a3f91f9f651a94` both before and after the rewrite,
+   `frontend/package.json` is unchanged at `025cbfbe42c381ec46ded3a0fe05835dba80c949`,
+   and `docs/roadmap.md` is present.
+7. **Build still works.** PASS. `pnpm install --frozen-lockfile` reports the
+   lockfile up to date against the global store, and `pnpm build` produces
+   `dist/` with 95 modules transformed.
+8. **Prevention holds.** PASS on the ignore rule: `git check-ignore -v` exits 0
+   and names `.gitignore:26`. The `docker compose up` half is **not yet
+   verified**: it requires a container run that has not happened since the
+   volume was added. See Drift below.
+9. **Remote is clean.** PASS. A fresh clone of
+   `https://github.com/amansharma2910/doer.git` has a 512 KB `.git`, 386.66 KiB
+   `size-pack`, 114 tracked files, and 0 reachable store objects.
+
+### Drift
+
+- Item 8's compose half is unverified. The `doer-web-store` volume is correct by
+  construction (it masks the exact path pnpm falls back to), but no
+  `docker compose up` has run since it was added, so the end-to-end claim that
+  the host stays clean rests on reasoning rather than observation. Verify on the
+  next container run.
+- A clone that ran `docker compose up` before this fix still has roughly 122 MB
+  at `frontend/.pnpm-store` on disk. It is now ignored rather than tracked, so it
+  will not show in `git status` and will not be noticed. Delete it manually.
+- No `.dockerignore` exists, so the build context still carries roughly 264 MB of
+  ignored-but-copied artifacts (`frontend/node_modules` at 131 MB,
+  `backend/.venv` at 133 MB). Removing the store cut the context from roughly
+  386 MB, which is an improvement rather than a fix. Tracked as follow-up below.
 
 ## 8. Rollback Plan
 

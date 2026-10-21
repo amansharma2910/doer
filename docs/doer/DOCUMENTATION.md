@@ -1,6 +1,6 @@
 # Doer: Project Documentation
 
-Last updated 2026-10-21, after milestones M1 to M7.
+Last updated 2026-10-21, after milestones M1 to M7 and the pnpm store history rewrite.
 
 ## Drift Notes
 
@@ -25,6 +25,21 @@ Known gaps between what the documents promise and what the code does.
    `docs/fixes/fix_plan_stale-block-snapshot.md` and deliberately left alone there;
    it needs its own fix plan.
 
+4. **A pre-2026-10-21 clone still has roughly 122 MB at `frontend/.pnpm-store` on
+   disk.** The history rewrite removed it from git and `.gitignore` now matches it
+   at any depth, which means it no longer appears in `git status` either. It is
+   inert but it is not small, and nothing will prompt you about it. Delete it by
+   hand: `rm -rf frontend/.pnpm-store`.
+
+5. **No `.dockerignore` exists, so the build context carries ignored artifacts.**
+   `Dockerfile:27` does `COPY frontend/ ./` wholesale, and the `.` context picks
+   up `frontend/node_modules` (131 MB) and `backend/.venv` (133 MB) among others,
+   roughly 264 MB in total. Removing the pnpm store cut this down from roughly
+   386 MB but did not fix it. The sharper half of the problem is correctness, not
+   size: line 27 copies the host's darwin-arm64 `node_modules` over the linux
+   install from line 26. Unverified, since no build was run to confirm the effect.
+   Needs its own fix plan.
+
 Closed on 2026-10-21: carry-forward demotions are now surfaced in the task list;
 a frontend test suite exists (Vitest, 74 tests covering the heatmap colour rules
 and contract-refusal decoding); and migrations run on container start.
@@ -35,6 +50,7 @@ and contract-refusal decoding); and migrations run on container start.
 doer/
 ├── Dockerfile              four stages: base, dev, web-build, runtime
 ├── docker-compose.yml      db, api (8787→8000), web (5173), backup (hourly dumps), tests (profile)
+│                        volumes: doer-pgdata, doer-web-modules, doer-web-store
 ├── .env.example            every setting, no values
 ├── backend/
 │   ├── pyproject.toml      deps, ruff, pytest config
@@ -177,6 +193,42 @@ older than the Postgres 17 server:
 ```bash
 docker compose exec db psql -U doer -d doer
 ```
+
+### Named volumes
+
+Three, all declared at the foot of `docker-compose.yml`:
+
+| Volume | Mount | Why it exists |
+|---|---|---|
+| `doer-pgdata` | `db:/var/lib/postgresql/data` | Database durability across restarts |
+| `doer-web-modules` | `web:/web/node_modules` | Keeps the container's linux install from colliding with the host's darwin one over the `./frontend:/web` bind mount |
+| `doer-web-store` | `web:/web/.pnpm-store` | Keeps pnpm's package store off the host bind mount |
+
+`doer-web-store` is load-bearing rather than an optimization. pnpm cannot
+hardlink from the bind-mounted project root into its home store, so it falls back
+to `<projectRoot>/.pnpm-store`, which resolves to `frontend/.pnpm-store` on the
+host. Without the volume that directory accumulates on the host and gets
+committed, which is what happened in M5: see
+`docs/fixes/fix_plan_pnpm-store-committed-to-history.md`.
+
+Two consequences worth knowing. The first `docker compose up` after pulling this
+change refetches the package store into an empty volume, so that one run is slow;
+later runs reuse it and are faster than before. And `docker compose down -v`
+discards the package cache along with the database, so the next `up` pays the
+refetch again.
+
+### If you have a clone from before 2026-10-21
+
+`main` was rewritten with `git filter-repo` on 2026-10-21 to remove the committed
+pnpm store, so 17 of the 22 commits up to that point have new SHAs. The five
+commits before M5 kept theirs. Re-clone, or:
+
+```bash
+git fetch origin && git reset --hard origin/main
+```
+
+Do not `git pull`: it will try to merge the old history and reintroduce the
+removed objects.
 
 ### Tests
 
