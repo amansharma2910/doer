@@ -4,12 +4,14 @@ Every test pins an explicit timezone and an explicit instant. None may depend on
 the machine's clock or local timezone.
 """
 
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from doer.daytime import (
     day_bounds,
     elapsed_anchor_dates,
+    grid_days,
+    local_date,
     offset_bounds,
     resolve_anchor_date,
 )
@@ -118,3 +120,49 @@ class TestElapsedDays:
     def test_nothing_elapsed_when_called_immediately(self):
         now = _at(2026, 3, 10, 16, 0)
         assert elapsed_anchor_dates(date(2026, 3, 10), now, **LATE) == []
+
+
+class TestLocalDate:
+    """The heatmap grid is a calendar grid in the user's timezone, never in UTC."""
+
+    def test_an_instant_can_already_be_tomorrow_somewhere_ahead_of_utc(self):
+        instant = datetime(2026, 10, 20, 23, 59, tzinfo=UTC)
+        assert local_date(instant, "Asia/Kolkata") == date(2026, 10, 21)
+        assert local_date(instant, "UTC") == date(2026, 10, 20)
+
+    def test_an_instant_can_still_be_yesterday_somewhere_behind_utc(self):
+        instant = datetime(2026, 10, 21, 2, 0, tzinfo=UTC)
+        assert local_date(instant, "America/Los_Angeles") == date(2026, 10, 20)
+        assert local_date(instant, "UTC") == date(2026, 10, 21)
+
+
+class TestGridDays:
+    """Weeks run Sunday to Saturday, matching the rendered grid."""
+
+    def test_a_midweek_day_pads_forward_to_saturday(self):
+        days = grid_days(date(2026, 10, 21), 4)  # a Wednesday
+        assert days[-1] == date(2026, 10, 24), "Saturday of that week"
+        assert days[0] == date(2026, 9, 27), "Sunday, four weeks back"
+        assert len(days) == 28
+
+    def test_a_saturday_ends_its_own_week(self):
+        days = grid_days(date(2026, 10, 24), 1)
+        assert days[0] == date(2026, 10, 18)
+        assert days[-1] == date(2026, 10, 24)
+
+    def test_a_sunday_opens_a_new_week(self):
+        days = grid_days(date(2026, 10, 25), 1)
+        assert days[0] == date(2026, 10, 25)
+        assert days[-1] == date(2026, 10, 31)
+
+    def test_the_grid_is_contiguous_ascending_and_whole_weeks(self):
+        days = grid_days(date(2026, 10, 21), 26)
+        assert len(days) == 26 * 7
+        assert days == sorted(days)
+        assert all((days[i + 1] - days[i]).days == 1 for i in range(len(days) - 1))
+
+    def test_the_given_day_is_always_in_its_own_grid(self):
+        """Whichever weekday it is. The defect this replaced could drop it."""
+        for offset in range(7):
+            today = date(2026, 10, 18) + timedelta(days=offset)
+            assert today in grid_days(today, 26), today.strftime("%A")

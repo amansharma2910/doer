@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./api";
 import type {
-  HeatmapCell,
+  HeatmapGrid,
   LogicalDay,
   PreferenceBlock,
   ProposedTask,
@@ -14,7 +14,7 @@ export const keys = {
   day: ["day", "current"] as const,
   tasks: ["tasks"] as const,
   blocks: ["blocks"] as const,
-  heatmap: (start: string, end: string) => ["heatmap", start, end] as const,
+  heatmap: (weeks: number) => ["heatmap", weeks] as const,
 };
 
 export function useMe() {
@@ -65,10 +65,10 @@ export function useBlocks() {
   });
 }
 
-export function useHeatmap(start: string, end: string) {
-  return useQuery<HeatmapCell[]>({
-    queryKey: keys.heatmap(start, end),
-    queryFn: () => api<HeatmapCell[]>(`/days/heatmap/range?start=${start}&end=${end}`),
+export function useHeatmap(weeks: number) {
+  return useQuery<HeatmapGrid>({
+    queryKey: keys.heatmap(weeks),
+    queryFn: () => api<HeatmapGrid>(`/days/heatmap?weeks=${weeks}`),
   });
 }
 

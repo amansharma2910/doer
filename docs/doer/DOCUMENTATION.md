@@ -26,7 +26,7 @@ Known gaps between what the documents promise and what the code does.
    it needs its own fix plan.
 
 Closed on 2026-10-21: carry-forward demotions are now surfaced in the task list;
-a frontend test suite exists (Vitest, 18 tests covering the heatmap colour rules
+a frontend test suite exists (Vitest, 72 tests covering the heatmap colour rules
 and contract-refusal decoding); and migrations run on container start.
 
 ## 1. Project Structure
@@ -173,7 +173,7 @@ uv run pytest -m live     # 7 more that call the real model and cost money
 ```
 
 ```bash
-cd frontend && pnpm test  # 18 tests: heatmap colour rules, error decoding
+cd frontend && pnpm test  # 72 tests: heatmap colour rules, error decoding
 ```
 
 The suite runs on the host against the Postgres compose publishes on 5432, in its
@@ -195,6 +195,11 @@ stays a configuration change.
 
 Doer is a FastAPI service and a Vite SPA over Postgres, running locally by
 decision rather than by accident (`docs/adr/0001-local-first-fastapi-monolith.md`).
+
+**Dates are resolved server-side.** Anchor dates are computed in the user's
+configured timezone, so the heatmap endpoint returns the grid's dates along with
+its cells rather than letting the browser derive them from its own clock
+(`docs/fixes/fix_plan_heatmap-utc-date-shift.md`).
 
 **The logical day is the spine.** Every task, completion, score, and heatmap cell
 resolves through a materialized `logical_days` row keyed on `(user_id, anchor_date)`

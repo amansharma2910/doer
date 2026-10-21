@@ -52,6 +52,7 @@ v1 scope. The implementation is complete.
 ## Fixes
 
 - [x] stale-block-snapshot: Preference block edits did not reach the day in progress, so the "set up a work block" nudge survived the user acting on it (fix: high, status: verified)
+- [x] heatmap-utc-date-shift: The history grid was labelled in UTC while cells are keyed by anchor dates in the user's timezone, so every label ran a day early (fix: high, status: verified)
 
 ## Business Objective Coverage
 
@@ -122,15 +123,11 @@ Checked on 2026-10-21 rather than asserted:
 4. **provisional-day-signal, plan v1 is draft.** Architecture-mode next: the two
    open questions that decide the shape are how "substantially elapsed" is defined
    and whether `scheduled_primary` becomes live-when-open in the same change.
-5. **Fix plan wanted for the UTC date shift in `buildRange`.** The heatmap builds
-   `Date` objects in local time and labels them with `toISOString`, so for any
-   positive-offset timezone the whole grid shifts a day during the early hours.
-   Confirmed live on 2026-10-21 at 05:29 IST. Chosen to get its own fix plan.
-6. **Fix plan wanted for the busy-subtraction wipe.** Nine of the eleven
+5. **Fix plan wanted for the busy-subtraction wipe.** Nine of the eleven
    `recompute_capacity` call sites pass no `busy`, inflating a calendar-connected
    user's threshold after any task write. Found during the stale-block-snapshot
    analysis and deliberately left out of that fix's scope.
-7. **Post-launch review** after 30 scored days: re-enter metrics-mode, answer the
+6. **Post-launch review** after 30 scored days: re-enter metrics-mode, answer the
    five questions in tracking plan §6 in order, and write the verdict back.
-8. **release-mode** only if and when deployment is wanted. That is a v2 decision,
+7. **release-mode** only if and when deployment is wanted. That is a v2 decision,
    and ADR 0001 names Cloud Run plus managed Postgres as the indicated path.

@@ -86,6 +86,13 @@ export type HeatmapCell = {
   is_at_risk: boolean;
 };
 
+export type HeatmapGrid = {
+  /** Every date in the grid, ascending. Built server-side in the user's
+      timezone, because cells are keyed by anchor dates resolved there. */
+  days: string[];
+  cells: HeatmapCell[];
+};
+
 export type ProposedTask = {
   title: string;
   preference_kind: PreferenceKind;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildRange, colorFor } from "../components/Heatmap";
+import { colorFor } from "../components/Heatmap";
 import type { HeatmapCell } from "../lib/types";
 
 function cell(partial: Partial<HeatmapCell> = {}): HeatmapCell {
@@ -85,15 +85,6 @@ describe("at-risk overrides both views (T-HEAT-04)", () => {
   });
 });
 
-describe("grid range", () => {
-  it("produces whole weeks so the grid is rectangular", () => {
-    const { days } = buildRange(26);
-    expect(days.length % 7).toBe(0);
-    expect(days.length).toBe(26 * 7);
-  });
-
-  it("returns dates in ascending order", () => {
-    const { days } = buildRange(4);
-    expect([...days].sort()).toEqual(days);
-  });
-});
+// The grid dates moved to the server, which owns anchor-date resolution in the
+// user's timezone. Their coverage lives in backend/tests/test_daytime.py.
+// See docs/fixes/fix_plan_heatmap-utc-date-shift.md.

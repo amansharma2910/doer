@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from doer.api.deps import current_user
+from doer.daytime import grid_days, local_date, utcnow
 from doer.db import get_session
 from doer.models import LogicalDay, Task, User
 from doer.schemas.day import DayOut
@@ -50,20 +51,30 @@ class HeatmapCell(BaseModel):
     is_at_risk: bool
 
 
-@router.get("/heatmap/range")
+class HeatmapGrid(BaseModel):
+    days: list[str]
+    cells: list[HeatmapCell]
+
+
+@router.get("/heatmap")
 async def heatmap(
-    start: date,
-    end: date,
+    weeks: int = Query(default=26, ge=1, le=53),
     user: User = Depends(current_user),
     session: AsyncSession = Depends(get_session),
-) -> list[HeatmapCell]:
-    """Per-day cells for both heatmap views.
+) -> HeatmapGrid:
+    """The grid dates and the per-day cells for both heatmap views.
+
+    The dates come from here rather than from the client because cells are keyed
+    by anchor dates resolved in the user's timezone, and a client deriving them
+    from its own clock puts the whole grid a day out for any offset ahead of UTC.
 
     View 1 colours by `completed_total`, which counts primary and non-primary
     completions together: non-primary work is excluded from the verdict, not from
     tracking. View 2 colours by `verdict` and is primary-only. The two views use
     different denominators on purpose.
     """
+    days = grid_days(local_date(utcnow(), user.timezone), weeks)
+    start, end = days[0], days[-1]
     rows = await session.execute(
         select(
             LogicalDay.anchor_date,
@@ -89,17 +100,20 @@ async def heatmap(
         )
         .order_by(LogicalDay.anchor_date)
     )
-    return [
-        HeatmapCell(
-            anchor_date=row.anchor_date.isoformat(),
-            completed_total=row.completed_total,
-            completed_primary=row.completed_primary,
-            scheduled_primary=row.scheduled_primary_count or 0,
-            verdict=row.verdict,
-            is_at_risk=row.is_at_risk,
-        )
-        for row in rows
-    ]
+    return HeatmapGrid(
+        days=[d.isoformat() for d in days],
+        cells=[
+            HeatmapCell(
+                anchor_date=row.anchor_date.isoformat(),
+                completed_total=row.completed_total,
+                completed_primary=row.completed_primary,
+                scheduled_primary=row.scheduled_primary_count or 0,
+                verdict=row.verdict,
+                is_at_risk=row.is_at_risk,
+            )
+            for row in rows
+        ],
+    )
 
 
 @router.get("/current")

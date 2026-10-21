@@ -109,6 +109,7 @@ edit share is how prompt drift first appears.
 | The one event writer | `backend/doer/events.py` |
 | Triggers | `backend/alembic/versions/*_initial_schema.py`, `*_tasks.py` |
 | Heatmap rendering rules | `frontend/src/components/Heatmap.tsx` |
+| Heatmap grid dates | `backend/doer/daytime.py` (`local_date`, `grid_days`) |
 | Drag reorder | `frontend/src/components/TaskList.tsx` |
 
 ## 4. Interfaces and Contracts
@@ -127,7 +128,7 @@ cookie and return **401** without it.
 | DELETE | `/settings/blocks/{id}` | **404** for another user's block |
 | GET | `/days/current` | **409** when outside the defined day |
 | POST | `/days/current/refresh-calendar` | Calendar failures degrade, never surface |
-| GET | `/days/heatmap/range?start=&end=` | Cells for both views |
+| GET | `/days/heatmap?weeks=` | The grid dates and the cells for both views |
 | GET | `/days/{anchor}` | |
 | GET POST | `/tasks` | **409** `primary_cap_reached` on the fifth primary |
 | PATCH DELETE | `/tasks/{id}` | **409** on a completed task |

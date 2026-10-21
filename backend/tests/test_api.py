@@ -6,6 +6,7 @@ through FastAPI: status codes, error body shapes, and authorization boundaries.
 
 import hashlib
 from datetime import UTC, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 import httpx
 import pytest
@@ -17,11 +18,11 @@ from doer.main import create_app
 from doer.models import AuthSession, PreferenceBlock, User
 
 
-async def _make_user(session, *, sub: str, email: str) -> tuple[User, str]:
+async def _make_user(session, *, sub: str, email: str, tz: str = "UTC") -> tuple[User, str]:
     user = User(
         google_sub=sub,
         email=email,
-        timezone="UTC",
+        timezone=tz,
         day_start_time=time(0, 0),
         day_duration_minutes=24 * 60,
         capacity_ratio=0.5,
@@ -338,27 +339,47 @@ class TestSettingsOverHttp:
 
 
 class TestHeatmapOverHttp:
-    async def test_the_range_returns_cells_for_days_that_exist(self, client, alice):
+    async def test_the_grid_carries_whole_weeks_and_a_cell_for_today(self, client, alice):
         _, token = alice
         await client.post("/tasks", headers=auth(token), json={"title": "t", "is_primary": True})
-        today = datetime.now(UTC).date()
 
-        response = await client.get(
-            f"/days/heatmap/range?start={today - timedelta(days=7)}&end={today}",
-            headers=auth(token),
-        )
+        response = await client.get("/days/heatmap?weeks=26", headers=auth(token))
         assert response.status_code == 200
-        assert any(cell["scheduled_primary"] >= 0 for cell in response.json())
+        body = response.json()
+
+        assert len(body["days"]) == 26 * 7
+        assert body["days"] == sorted(body["days"])
+        today = datetime.now(UTC).date().isoformat()
+        assert today in body["days"]
+        assert any(cell["anchor_date"] == today for cell in body["cells"])
+
+    async def test_the_grid_is_built_in_the_users_timezone(self, client, session):
+        """The defect this endpoint shape replaced: dates derived from a UTC
+        instant put the whole grid a day out for any offset ahead of UTC.
+
+        The rule itself is pinned deterministically in tests/test_daytime.py; this
+        asserts the endpoint actually applies it to the configured timezone."""
+        _, token = await _make_user(
+            session, sub="kiritimati", email="kiri@example.com", tz="Pacific/Kiritimati"
+        )
+
+        body = (await client.get("/days/heatmap?weeks=4", headers=auth(token))).json()
+
+        local_today = datetime.now(ZoneInfo("Pacific/Kiritimati")).date().isoformat()
+        assert local_today in body["days"], "the grid must end on the user's own week"
+
+    async def test_the_weeks_parameter_is_bounded(self, client, alice):
+        _, token = alice
+        assert (await client.get("/days/heatmap?weeks=0", headers=auth(token))).status_code == 422
+        assert (await client.get("/days/heatmap?weeks=99", headers=auth(token))).status_code == 422
 
     async def test_the_heatmap_is_user_scoped(self, client, alice, bob):
         _, alice_token = alice
         _, bob_token = bob
         await client.post("/tasks", headers=auth(alice_token), json={"title": "t"})
-        today = datetime.now(UTC).date()
-        url = f"/days/heatmap/range?start={today - timedelta(days=7)}&end={today}"
 
-        bob_cells = (await client.get(url, headers=auth(bob_token))).json()
-        assert all(cell["completed_total"] == 0 for cell in bob_cells)
+        bob_body = (await client.get("/days/heatmap?weeks=4", headers=auth(bob_token))).json()
+        assert all(cell["completed_total"] == 0 for cell in bob_body["cells"])
 
 
 class TestEstimationBudgetOverHttp:
@@ -434,14 +455,8 @@ class TestHeatmapData:
         for task_id in ids:
             await client.post(f"/tasks/{task_id}/complete", headers=auth(token))
 
-        today = datetime.now(UTC).date()
-        cells = (
-            await client.get(
-                f"/days/heatmap/range?start={today - timedelta(days=1)}&end={today}",
-                headers=auth(token),
-            )
-        ).json()
-        cell = next(c for c in cells if c["completed_total"] > 0)
+        body = (await client.get("/days/heatmap?weeks=1", headers=auth(token))).json()
+        cell = next(c for c in body["cells"] if c["completed_total"] > 0)
         assert cell["completed_total"] == 5, "counts everything finished"
         assert cell["completed_primary"] == 2, "view 2's denominator is primaries only"
 
@@ -454,14 +469,8 @@ class TestHeatmapData:
         await client.post("/tasks", headers=auth(token), json={"title": "t"})
 
         day = await day_service.current_day(session, user)
-        today = datetime.now(UTC).date()
-        cells = (
-            await client.get(
-                f"/days/heatmap/range?start={today - timedelta(days=2)}&end={today}",
-                headers=auth(token),
-            )
-        ).json()
-        assert any(c["anchor_date"] == day.anchor_date.isoformat() for c in cells)
+        body = (await client.get("/days/heatmap?weeks=1", headers=auth(token))).json()
+        assert any(c["anchor_date"] == day.anchor_date.isoformat() for c in body["cells"])
 
 
 class TestStoredTimestamps:

@@ -15,14 +15,18 @@ const WEEKS = 26;
  */
 export function Heatmap() {
   const [view, setView] = useState<View>("count");
-  const { start, end, days } = useMemo(() => buildRange(WEEKS), []);
-  const { data } = useHeatmap(start, end);
+  const { data } = useHeatmap(WEEKS);
 
   const byDate = useMemo(() => {
     const map = new Map<string, HeatmapCell>();
-    for (const cell of data ?? []) map.set(cell.anchor_date, cell);
+    for (const cell of data?.cells ?? []) map.set(cell.anchor_date, cell);
     return map;
   }, [data]);
+
+  // Placeholders of the right shape while the query is in flight. The dates come
+  // from the server now, so without these the grid would collapse and reflow on
+  // every mount.
+  const days = data?.days ?? Array.from({ length: WEEKS * 7 }, () => null);
 
   const weeks: (string | null)[][] = [];
   for (let i = 0; i < days.length; i += 7) weeks.push(days.slice(i, i + 7));
@@ -45,8 +49,13 @@ export function Heatmap() {
         <div className="flex gap-[3px]">
           {weeks.map((week, i) => (
             <div key={i} className="flex flex-col gap-[3px]">
-              {week.map((date) => (
-                <Cell key={date} date={date} cell={date ? byDate.get(date) : undefined} view={view} />
+              {week.map((date, j) => (
+                <Cell
+                  key={date ?? `${i}-${j}`}
+                  date={date}
+                  cell={date ? byDate.get(date) : undefined}
+                  view={view}
+                />
               ))}
             </div>
           ))}
@@ -67,7 +76,13 @@ function Cell({
   cell: HeatmapCell | undefined;
   view: View;
 }) {
-  if (!date) return <span className="h-[11px] w-[11px]" />;
+  // A placeholder while the server's dates are in flight: same footprint and the
+  // same empty ring, so the grid does not reflow or flash when they land.
+  if (!date) {
+    return (
+      <span className="h-[11px] w-[11px] rounded-[2px] ring-1 ring-inset ring-black/[0.04] dark:ring-white/[0.06]" />
+    );
+  }
 
   return (
     <span
@@ -147,19 +162,4 @@ function ViewButton({
       {children}
     </button>
   );
-}
-
-export function buildRange(weeks: number) {
-  const today = new Date();
-  const end = new Date(today);
-  // Pad to the end of the current week so the grid is rectangular.
-  end.setDate(end.getDate() + (6 - end.getDay()));
-  const start = new Date(end);
-  start.setDate(start.getDate() - weeks * 7 + 1);
-
-  const days: string[] = [];
-  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-    days.push(d.toISOString().slice(0, 10));
-  }
-  return { start: days[0], end: days[days.length - 1], days };
 }

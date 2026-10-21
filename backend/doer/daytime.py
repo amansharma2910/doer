@@ -108,5 +108,27 @@ def elapsed_anchor_dates(
     return out
 
 
+def local_date(now: datetime, tz: str) -> date:
+    """The calendar date at `now` in `tz`.
+
+    The heatmap grid is a calendar grid, and its cells are keyed by anchor dates
+    resolved in the user's timezone. Deriving those dates from a UTC instant puts
+    the whole grid a day out for any offset ahead of UTC.
+    """
+    return now.astimezone(ZoneInfo(tz)).date()
+
+
+def grid_days(today: date, weeks: int) -> list[date]:
+    """Every date in a `weeks` long grid ending on the week containing `today`.
+
+    Weeks run Sunday to Saturday, so the grid is padded forward to the Saturday on
+    or after `today`. Python counts weekdays from Monday, hence the shift.
+    """
+    sunday_index = (today.weekday() + 1) % 7
+    end = today + timedelta(days=6 - sunday_index)
+    start = end - timedelta(days=weeks * 7 - 1)
+    return [start + timedelta(days=i) for i in range(weeks * 7)]
+
+
 def utcnow() -> datetime:
     return datetime.now(UTC)
