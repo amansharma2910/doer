@@ -53,6 +53,7 @@ v1 scope. The implementation is complete.
 
 - [x] stale-block-snapshot: Preference block edits did not reach the day in progress, so the "set up a work block" nudge survived the user acting on it (fix: high, status: verified)
 - [x] heatmap-utc-date-shift: The history grid was labelled in UTC while cells are keyed by anchor dates in the user's timezone, so every label ran a day early (fix: high, status: verified)
+- [x] tests-wipe-production-database: The suite dropped the schema of whatever DATABASE_URL named, and the api container names production, so running it destroyed all application data (fix: critical, status: verified)
 
 ## Business Objective Coverage
 
@@ -99,14 +100,29 @@ Recorded here because each changed a commitment made in an earlier document.
    to cover blocks as well, which made the dashboard's own nudge unactionable until
    the next day. Corrected by `docs/fixes/fix_plan_stale-block-snapshot.md`. AC-13's
    wording is worth tightening if plan v2 is ever written.
+7. **The test suite never had its own database.** Plan §11 line 279 states that
+   the suite "creates and migrates its own `doer_test` database and never touches
+   the development one", and `docs/doer/DOCUMENTATION.md` repeated it. Neither was
+   true: nothing created that database and nothing confined the suite to it, which
+   is how the 2026-10-21 data loss happened. The property is now enforced by two
+   assertions in `backend/tests/conftest.py`, so the separation is guarded rather
+   than designed in. Plan v1 is left as written, being the record of what was
+   planned; `DOCUMENTATION.md` is corrected.
+8. **Development runs more than three compose services.** `README.md` and
+   `docs/adr/0001-local-first-fastapi-monolith.md` both describe db, api and web.
+   An always-on `backup` service and a profile-gated `tests` service now exist.
+   The README is corrected; the ADR is left as written, since ADRs record the
+   decision of their time.
 
 ## Verification
 
 Checked on 2026-10-21 rather than asserted:
 
 - All 21 acceptance criteria (AC-01 to AC-21) have at least one automated test.
-- All 76 named test cases (T-*) in plan §11.3 are implemented. 190 backend tests
-  plus 18 frontend tests; 7 live tests excluded from the default run.
+- All 76 named test cases (T-*) in plan §11.3 are implemented. 205 backend tests
+  plus 72 frontend tests as of 2026-10-21; 7 live tests excluded from the default
+  run. The earlier figures here (190 and 18) were stale and disagreed with
+  `docs/doer/DOCUMENTATION.md`.
 - All 31 events in the tracking plan are emitted by the code.
 - The runtime container builds and serves both the SPA and the API.
 
@@ -123,11 +139,26 @@ Checked on 2026-10-21 rather than asserted:
 4. **provisional-day-signal, plan v1 is draft.** Architecture-mode next: the two
    open questions that decide the shape are how "substantially elapsed" is defined
    and whether `scheduled_primary` becomes live-when-open in the same change.
-5. **Fix plan wanted for the busy-subtraction wipe.** Nine of the eleven
+5. **Harden the test separation with a database role.** `doer` and `doer_test`
+   share a cluster, a role and a password, so the suite is kept off production by
+   two assertions rather than by permissions. A role with no rights on `doer` is
+   the version that holds against a malformed URL or a future rewrite of the
+   harness. Deferred deliberately in
+   `docs/fixes/fix_plan_tests-wipe-production-database.md`.
+6. **Documents doc-crawler flagged and this pass did not change**, each owned by a
+   mode that has not run: `docs/user_testing_documentation.md` lines 13 and 18
+   claim nothing runs migrations automatically, which contradicts the container
+   start command (qa-mode owns that file); `docs/releases/CHANGELOG.md` has no
+   `[Unreleased]` entries for today's three fixes or the heatmap endpoint change
+   (release-mode); and `.env.example` line 4 disagrees with
+   `docs/setup/gcp_setup.md` line 130 about the database host, which sends a
+   reader following one of them to a connection failure and the other to
+   production.
+7. **Fix plan wanted for the busy-subtraction wipe.** Nine of the eleven
    `recompute_capacity` call sites pass no `busy`, inflating a calendar-connected
    user's threshold after any task write. Found during the stale-block-snapshot
    analysis and deliberately left out of that fix's scope.
-6. **Post-launch review** after 30 scored days: re-enter metrics-mode, answer the
+8. **Post-launch review** after 30 scored days: re-enter metrics-mode, answer the
    five questions in tracking plan §6 in order, and write the verdict back.
-7. **release-mode** only if and when deployment is wanted. That is a v2 decision,
+9. **release-mode** only if and when deployment is wanted. That is a v2 decision,
    and ADR 0001 names Cloud Run plus managed Postgres as the indicated path.

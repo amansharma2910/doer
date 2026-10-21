@@ -48,6 +48,41 @@ services:
       - ./frontend:/web
       - doer-web-modules:/web/node_modules
 
+  # The suite drops and re-migrates the schema it is pointed at, so it gets its
+  # own service rather than borrowing the api container, which carries the
+  # production DATABASE_URL. Deliberately no `env_file: .env`: that file names
+  # the production database too.
+  #   docker compose --profile test run --rm tests
+  tests:
+    build:
+      context: .
+      target: dev
+    profiles: ["test"]
+    environment:
+      DOER_TEST_DATABASE_URL: postgresql+asyncpg://doer:doer@db:5432/doer_test
+    # `python -m` rather than bare `pytest`: the app package is bind-mounted, not
+    # installed, so it is importable only when the working directory is on sys.path.
+    command: ["python", "-m", "pytest"]
+    volumes:
+      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # Hourly dumps, 48 retained. Added after a test run against the production
+  # database destroyed everything with no way back: see
+  # docs/fixes/fix_plan_tests-wipe-production-database.md.
+  backup:
+    image: postgres:17
+    environment:
+      PGPASSWORD: doer
+    command: ["sh", "-c", "mkdir -p /backups && while true; do pg_dump -h db -U doer -d doer -F c -f /backups/doer-$$(date +%Y%m%d-%H%M%S).dump && ls -1t /backups/*.dump | tail -n +49 | xargs -r rm -f; sleep 3600; done"]
+    volumes:
+      - ./backups:/backups
+    depends_on:
+      db:
+        condition: service_healthy
+
 volumes:
   doer-pgdata:
   doer-web-modules:

@@ -31,3 +31,6 @@ postgres-data/
 # Editors
 .idea/
 *.swp
+
+# Local database dumps from the compose backup service.
+backups/

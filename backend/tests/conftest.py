@@ -14,7 +14,26 @@ from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 
-os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://doer:doer@localhost:5432/doer_test")
+# Assigned, never defaulted. `setdefault` yields to an inherited value, and the
+# api container sets DATABASE_URL to the production database while also shipping
+# the test runner, so this file's DROP SCHEMA landed on real data. Overrides come
+# from a test-only name that nothing in compose or .env sets.
+# See docs/fixes/fix_plan_tests-wipe-production-database.md.
+DEFAULT_TEST_URL = "postgresql+asyncpg://doer:doer@localhost:5432/doer_test"
+_inherited = os.environ.get("DATABASE_URL")
+_override = os.environ.get("DOER_TEST_DATABASE_URL")
+os.environ["DATABASE_URL"] = _override or DEFAULT_TEST_URL
+
+# Ignoring the inherited value silently would be safe but unreadable: inside the
+# api container the fallback cannot reach `localhost` and the run dies on a bare
+# connection error. Say what happened instead.
+if _inherited and not _override and not _inherited.rsplit("/", 1)[-1].endswith("_test"):
+    raise RuntimeError(
+        f"refusing to run: DATABASE_URL names {_inherited.rsplit('/', 1)[-1]!r}, which is "
+        f"not a test database, and this suite drops the schema it is pointed at. "
+        f"Run `docker compose --profile test run --rm tests`, or set "
+        f"DOER_TEST_DATABASE_URL, or unset DATABASE_URL in this shell."
+    )
 os.environ.setdefault("FERNET_KEY", "Q2hhbmdlTWVDaGFuZ2VNZUNoYW5nZU1lQ2hhbmdlTWU=")
 # A fire-and-forget estimation task outlives the fixtures that own its rows and
 # fails during teardown, which showed up as an intermittent error. Tests drive
@@ -24,12 +43,25 @@ os.environ.setdefault("SWEEPER_ENABLED", "false")
 
 import asyncpg  # noqa: E402
 import pytest  # noqa: E402
+from sqlalchemy.engine import make_url  # noqa: E402
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine  # noqa: E402
 
 from doer.models import PreferenceBlock, User  # noqa: E402
 
 TEST_URL = os.environ["DATABASE_URL"]
-RAW_URL = TEST_URL.replace("+asyncpg", "")
+_url = make_url(TEST_URL)
+
+# The last line of defence, and the one that survives someone "fixing" the
+# override above to make in-container runs work again. Raised at import time, so
+# collection fails before any connection is opened.
+if not (_url.database or "").endswith("_test"):
+    raise RuntimeError(
+        f"refusing to run: the suite drops and re-migrates the schema of the database "
+        f"it is pointed at, and {_url.database!r} is not a test database. Set "
+        f"DOER_TEST_DATABASE_URL to a database whose name ends in '_test'."
+    )
+
+RAW_URL = _url.set(drivername="postgresql").render_as_string(hide_password=False)
 
 
 @pytest.fixture(scope="session", autouse=True)

@@ -34,7 +34,7 @@ and contract-refusal decoding); and migrations run on container start.
 ```
 doer/
 ├── Dockerfile              four stages: base, dev, web-build, runtime
-├── docker-compose.yml      db (postgres:17), api (8787→8000), web (5173)
+├── docker-compose.yml      db, api (8787→8000), web (5173), backup (hourly dumps), tests (profile)
 ├── .env.example            every setting, no values
 ├── backend/
 │   ├── pyproject.toml      deps, ruff, pytest config
@@ -109,11 +109,11 @@ Most depended-upon first:
 | Module | Depended on by |
 |---|---|
 | `doer.models` | every service, every router, alembic, every test |
-| `doer.daytime` | day, close, task, calendar, estimation, assistant, token_store, deps |
+| `doer.daytime` | day, close, task, calendar, estimation, assistant, token_store, deps, days router |
 | `doer.events` | task, day, close, calendar, token_store, estimation, assistant, auth |
 | `doer.config` | db, crypto, main, four services, two routers, alembic env |
 | `doer.db` | all five routers, estimation (its own session for detached work) |
-| `services.task_service` | close, calendar, tasks router, assistant router |
+| `services.task_service` | close, calendar, tasks router, assistant router, settings router |
 | `services.capacity` | day_service, task_service, calendar |
 | `api.deps` | all five routers |
 
@@ -166,9 +166,11 @@ docker compose exec db psql -U doer -d doer
 ### Tests
 
 ```bash
-cd backend && uv sync --group dev
-createdb doer_test   # once, or: docker compose exec db createdb -U doer doer_test
-uv run pytest             # 190 tests, deterministic and offline
+docker compose --profile test run --rm tests   # 205 tests, in a container
+
+cd backend && uv sync --group dev              # or on the host
+docker compose exec db psql -U doer -d postgres -c "create database doer_test"
+uv run pytest             # 205 tests, deterministic and offline
 uv run pytest -m live     # 7 more that call the real model and cost money
 ```
 
@@ -176,10 +178,26 @@ uv run pytest -m live     # 7 more that call the real model and cost money
 cd frontend && pnpm test  # 72 tests: heatmap colour rules, error decoding
 ```
 
-The suite runs on the host against the Postgres compose publishes on 5432, in its
-own `doer_test` database, which it drops and re-migrates each session. It migrates
-with Alembic rather than `create_all` on purpose: the append-only and immutability
-guarantees live in triggers that only migrations create.
+The suite drops and re-migrates the schema of the database it is pointed at, so
+it refuses to start unless that database's name ends in `_test`. It ignores
+`DATABASE_URL` as a target, because the `api` container sets that to the
+production database; the only accepted override is `DOER_TEST_DATABASE_URL`. An
+inherited non-test `DATABASE_URL`, which is what a shell that has sourced `.env`
+carries, is a hard refusal rather than a silent redirect.
+
+The separation is **guarded, not isolated**: `doer` and `doer_test` share a
+cluster, a role and a password, and two assertions in `backend/tests/conftest.py`
+are what keep them apart. A role with no rights on `doer` is the stronger version
+and is recorded as a follow-up.
+
+It migrates with Alembic rather than `create_all` on purpose: the append-only and
+immutability guarantees live in triggers that only migrations create. For the
+same reason `alembic downgrade` is refused unless
+`DOER_ALLOW_DESTRUCTIVE_MIGRATION=1` is set, since every migration here drops
+tables. `alembic upgrade` is unguarded, because the container runs it on start.
+
+All of this exists because the suite destroyed the development database on
+2026-10-21: `docs/fixes/fix_plan_tests-wipe-production-database.md`.
 
 ### Production-parity image
 

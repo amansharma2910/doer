@@ -36,8 +36,15 @@ Apply migrations on first run:
 
 ```bash
 cd backend && uv sync --group dev
-set -a && . ../.env && set +a && uv run alembic upgrade head
+(set -a && . ../.env && set +a && uv run alembic upgrade head)
 ```
+
+The subshell matters. Exporting `.env` into your own shell leaves `DATABASE_URL`
+pointing at the production database for everything you run afterwards, including
+the test suite. The parentheses confine it to this one command.
+
+The `api` container already runs `alembic upgrade head` on start, so this is a
+host convenience rather than a prerequisite.
 
 The local `psql` client is older than the Postgres 17 server, so reach the
 database through the container rather than the host:
@@ -51,7 +58,20 @@ docker compose exec db psql -U doer -d doer
 ```bash
 cd backend && uv run pytest        # deterministic, offline, free
 cd backend && uv run pytest -m live  # calls the real model; costs money
+docker compose --profile test run --rm tests   # the same suite, in a container
 ```
+
+The suite drops and re-migrates the schema of the database it is pointed at, so
+it refuses to start against anything whose name does not end in `_test`. It
+targets `doer_test`, which you create once with
+`docker compose exec db psql -U doer -d postgres -c "create database doer_test"`.
+Point it elsewhere with `DOER_TEST_DATABASE_URL`; it never uses `DATABASE_URL` as the
+target, because the api container sets that to the production database. If your
+shell has one set to a non-test database, the suite refuses to start rather than
+quietly redirecting.
+
+Do not run the suite with `docker compose exec api pytest`. It is refused now,
+but it is refused by one assertion, not by the shape of the system.
 
 Integration tests run against a real Postgres migrated with Alembic, not against
 model metadata. The guarantees that matter most (append-only events,
@@ -61,8 +81,9 @@ would omit exactly those.
 
 ## How it is put together
 
-A FastAPI service and a Vite SPA, with Postgres. In development they run as three
-compose services. A second Docker target builds the single container in which
+A FastAPI service and a Vite SPA, with Postgres. In development they run as
+compose services, alongside an hourly database dump; a profile-gated `tests`
+service runs the suite against its own database. A second Docker target builds the single container in which
 FastAPI serves the built SPA; it is kept working from the first milestone so that
 deploying later is configuration rather than a rewrite.
 
