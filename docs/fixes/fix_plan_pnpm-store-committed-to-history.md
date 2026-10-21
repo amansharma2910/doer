@@ -2,7 +2,7 @@
 type: fix_plan
 issue: pnpm-store-committed-to-history
 severity: medium
-status: applied
+status: verified
 related_feature: daily-task-planner
 linear_issue: null
 created: 2026-10-21
