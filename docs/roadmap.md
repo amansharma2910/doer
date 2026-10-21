@@ -11,10 +11,16 @@ updated: 2026-10-21
 Derived from implementation plan `daily-task-planner` v1 and ADR 0001 (accepted).
 All seven complete on 2026-10-21.
 
-Prerequisites, both satisfied: the tracking plan (`docs/metrics/daily-task-planner_tracking_plan.md`)
+Prerequisites, both satisfied as stated: the tracking plan (`docs/metrics/daily-task-planner_tracking_plan.md`)
 was written before M1 so instrumentation landed with each transition rather than
 after, and the repository was initialized with a `.gitignore` covering `.venv`,
 `node_modules`, `__pycache__`, `.env`, and `.DS_Store` before any scaffolding existed.
+
+The second prerequisite was met and still proved insufficient. That list
+enumerates the artifacts anticipated at the time, and `frontend/.pnpm-store`
+was not among them, so 122 MB entered history during M5 and was only removed on
+2026-10-21. Recorded here because the prerequisite reads as a guarantee and is
+not one: see `docs/fixes/fix_plan_pnpm-store-committed-to-history.md`.
 
 - [x] **M1: Foundations.** Docker Compose, uv on Python 3.13, Alembic baseline,
       Google OAuth with `calendar.freebusy`, Fernet-encrypted tokens, session
@@ -55,6 +61,7 @@ v1 scope. The implementation is complete.
 - [x] heatmap-utc-date-shift: The history grid was labelled in UTC while cells are keyed by anchor dates in the user's timezone, so every label ran a day early (fix: high, status: verified)
 - [x] tests-wipe-production-database: The suite dropped the schema of whatever DATABASE_URL named, and the api container names production, so running it destroyed all application data (fix: critical, status: verified)
 - [x] signout-leaves-page-frozen: queryClient.clear() orphaned the mounted observers on stale success, so signing out left the dashboard on screen until a manual reload (fix: high, status: verified)
+- [x] pnpm-store-committed-to-history: The compose web service wrote pnpm's package store onto the host bind mount and nothing ignored it, so 122 MB and 7,863 files entered git history, 98.1% of the repository by size (fix: medium, status: verified)
 
 ## Business Objective Coverage
 
@@ -77,8 +84,8 @@ Two exclusions worth stating, so the empty list is not read as a claim that
 nothing happened. Defect work is tracked under Fixes above, not here. And by
 agreement on 2026-10-21, layout-only fixes (no behavior change, no contract
 change, no data-shape change) are applied without a fix plan, so they carry no
-frontmatter and appear in neither section; commit `7d67df6` is the first of
-those.
+frontmatter and appear in neither section; commit `6e21e0a` is the first of
+those. That SHA was `7d67df6` until the 2026-10-21 history rewrite re-pointed it.
 
 ## Scope and Document Corrections
 
@@ -167,11 +174,24 @@ Checked on 2026-10-21 rather than asserted:
    is false and was false before today: offline, the app never mounts the
    dashboard, so neither the stale snapshot nor the staleness indicator can be
    observed. No flow covers sign-out at all.
-9. **Fix plan wanted for the busy-subtraction wipe.** Nine of the eleven
+9. **Fix plan wanted for the Docker build context.** No `.dockerignore` exists, so
+   the context carries roughly 264 MB of ignored-but-copied artifacts, and
+   `Dockerfile:27` copies the host's darwin-arm64 `node_modules` over the linux
+   install from line 26. The size half is cosmetic; the overlay half is a
+   correctness question that no build has been run to settle. Declined as
+   out-of-scope in `docs/fixes/fix_plan_pnpm-store-committed-to-history.md`.
+10. **`README.md` does not reach the fix plans, and no mode owns it.** Its "Where
+   the thinking is written down" table lists six documents and omits
+   `docs/fixes/` entirely, so none of the five fix plans is discoverable from the
+   entry point, and the 2026-10-21 history rewrite is recorded nowhere a reader
+   starting at the README would find it. The re-clone guidance now lives in
+   `docs/doer/DOCUMENTATION.md`. `README.md` appears in no row of CLAUDE.md's
+   file ownership table, so this needs either a user decision or a new owner.
+11. **Fix plan wanted for the busy-subtraction wipe.** Nine of the eleven
    `recompute_capacity` call sites pass no `busy`, inflating a calendar-connected
    user's threshold after any task write. Found during the stale-block-snapshot
    analysis and deliberately left out of that fix's scope.
-10. **Post-launch review** after 30 scored days: re-enter metrics-mode, answer the
+12. **Post-launch review** after 30 scored days: re-enter metrics-mode, answer the
    five questions in tracking plan §6 in order, and write the verdict back.
-11. **release-mode** only if and when deployment is wanted. That is a v2 decision,
+13. **release-mode** only if and when deployment is wanted. That is a v2 decision,
    and ADR 0001 names Cloud Run plus managed Postgres as the indicated path.
