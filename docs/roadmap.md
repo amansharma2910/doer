@@ -43,10 +43,15 @@ reporting, push-based calendar sync, and any background worker or Redis.
 ## Feature Checklist
 
 - [x] daily-task-planner: Daily commitment planner with 4-task cap, 75% success rule, user-defined logical day, and read-only Google Calendar capacity input (plan: v1, status: in_progress)
+- [ ] provisional-day-signal: Live on-track or behind state for the day in progress in the history heatmap, additive to the persisted verdict (plan: v1, status: draft)
 
 Plan status stays `in_progress` rather than `shipped`: release-mode sets `shipped`
 at ship time, and nothing has shipped, because deployment is deliberately out of
 v1 scope. The implementation is complete.
+
+## Fixes
+
+- [x] stale-block-snapshot: Preference block edits did not reach the day in progress, so the "set up a work block" nudge survived the user acting on it (fix: high, status: verified)
 
 ## Business Objective Coverage
 
@@ -62,8 +67,15 @@ v1 scope. The implementation is complete.
 
 ## Unplanned Work
 
-None. Every change traces to plan v1 or to a correction recorded in ADR 0001's
-amendments.
+None. No plan or fix plan carries `unplanned: true`, which is what this section
+tracks.
+
+Two exclusions worth stating, so the empty list is not read as a claim that
+nothing happened. Defect work is tracked under Fixes above, not here. And by
+agreement on 2026-10-21, layout-only fixes (no behavior change, no contract
+change, no data-shape change) are applied without a fix plan, so they carry no
+frontmatter and appear in neither section; commit `7d67df6` is the first of
+those.
 
 ## Scope and Document Corrections
 
@@ -81,6 +93,11 @@ Recorded here because each changed a commitment made in an earlier document.
    unnecessary. Removed from the manifests rather than left as aspiration.
 5. **The API runs on port 8787**, not 8000, which was occupied on the development
    machine.
+6. **AC-13 freezes the day shape, not the preference blocks.** Plan line 54 defines
+   day shape as start time and duration; the implementation generalized the freeze
+   to cover blocks as well, which made the dashboard's own nudge unactionable until
+   the next day. Corrected by `docs/fixes/fix_plan_stale-block-snapshot.md`. AC-13's
+   wording is worth tightening if plan v2 is ever written.
 
 ## Verification
 
@@ -98,11 +115,22 @@ Checked on 2026-10-21 rather than asserted:
    question is behavioral and cannot be answered by more building.
 2. **Create the GCP project** when calendar-aware capacity is wanted; the app works
    without it, degraded to raw focus-block capacity. See `docs/setup/gcp_setup.md`.
-3. **One Drift Note remains** in `docs/doer/DOCUMENTATION.md`: `actual_minutes`
-   is populated only for tasks that were explicitly started, so the
-   estimation-error indicator reads over a subset. Worth revisiting if that subset
-   is thin at review time.
-4. **Post-launch review** after 30 scored days: re-enter metrics-mode, answer the
+3. **Three Drift Notes stand** in `docs/doer/DOCUMENTATION.md`: `actual_minutes`
+   covers only explicitly started tasks, so the estimation-error indicator reads
+   over a subset; a user row cannot be deleted once it has events; and calendar
+   busy time is un-subtracted by any task mutation until the next stale sync.
+4. **provisional-day-signal, plan v1 is draft.** Architecture-mode next: the two
+   open questions that decide the shape are how "substantially elapsed" is defined
+   and whether `scheduled_primary` becomes live-when-open in the same change.
+5. **Fix plan wanted for the UTC date shift in `buildRange`.** The heatmap builds
+   `Date` objects in local time and labels them with `toISOString`, so for any
+   positive-offset timezone the whole grid shifts a day during the early hours.
+   Confirmed live on 2026-10-21 at 05:29 IST. Chosen to get its own fix plan.
+6. **Fix plan wanted for the busy-subtraction wipe.** Nine of the eleven
+   `recompute_capacity` call sites pass no `busy`, inflating a calendar-connected
+   user's threshold after any task write. Found during the stale-block-snapshot
+   analysis and deliberately left out of that fix's scope.
+7. **Post-launch review** after 30 scored days: re-enter metrics-mode, answer the
    five questions in tracking plan §6 in order, and write the verdict back.
-5. **release-mode** only if and when deployment is wanted. That is a v2 decision,
+8. **release-mode** only if and when deployment is wanted. That is a v2 decision,
    and ADR 0001 names Cloud Run plus managed Postgres as the indicated path.
