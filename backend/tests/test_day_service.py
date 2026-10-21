@@ -1,16 +1,19 @@
 """Logical day materialization, snapshot freezing, and concurrency."""
 
 import asyncio
-from datetime import date, time
+from datetime import UTC, date, datetime, time
+from zoneinfo import ZoneInfo
 
 import pytest
 from sqlalchemy import func, select
 
 from doer.daytime import utcnow
-from doer.models import Event, LogicalDay
-from doer.services import day_service
+from doer.models import Event, LogicalDay, PreferenceBlock
+from doer.services import day_service, task_service
 
 ANCHOR = date(2026, 3, 10)
+# 16:00 Kolkata on the anchor date, which is inside the 14:00-to-05:00 day.
+MIDDAY = datetime(2026, 3, 10, 16, 0, tzinfo=ZoneInfo("Asia/Kolkata")).astimezone(UTC)
 
 
 class TestOpenDay:
@@ -145,6 +148,103 @@ class TestIndeterminateByDefault:
         assert day.is_indeterminate is True
         assert day.indeterminate_reason == "no_focus_blocks"
         assert day.capacity_base_minutes == 0
+
+
+class TestBlockRefresh:
+    """Block edits reach the day in progress, unlike day shape edits (AC-13).
+
+    AC-13 freezes the day shape, which plan line 54 defines as start time and
+    duration. Blocks are a separate setting, and the dashboard tells a user with
+    none to go and define one, so that has to take effect on the day they are
+    looking at rather than the next one.
+    """
+
+    async def test_adding_a_focus_block_clears_the_nudge_the_same_day(self, session, user):
+        day = await day_service.open_day(session, user, ANCHOR)
+        await session.commit()
+        assert day.indeterminate_reason == "no_focus_blocks"
+        frozen_shape = dict(day.shape_snapshot)
+
+        session.add(
+            PreferenceBlock(
+                user_id=user.id,
+                kind="deep_work",
+                start_offset_minutes=60,
+                end_offset_minutes=240,
+            )
+        )
+        await session.commit()
+
+        refreshed = await day_service.refresh_blocks(session, user, MIDDAY)
+        assert refreshed is not None
+        await task_service.recompute_capacity(session, user, refreshed)
+        await session.commit()
+
+        assert refreshed.is_indeterminate is False
+        assert refreshed.indeterminate_reason is None
+        assert refreshed.capacity_base_minutes == 180
+        assert refreshed.threshold_minutes == 90
+
+        # The shape half of the snapshot is still frozen.
+        for key in ("day_start_time", "day_duration_minutes", "timezone", "capacity_ratio"):
+            assert refreshed.shape_snapshot[key] == frozen_shape[key]
+        assert float(refreshed.capacity_ratio) == 0.5
+
+    async def test_deleting_the_last_focus_block_restores_the_nudge(
+        self, session, user_with_focus
+    ):
+        user = user_with_focus
+        day = await day_service.open_day(session, user, ANCHOR)
+        await session.commit()
+        assert day.is_indeterminate is False
+
+        for block in await day_service._blocks(session, user):
+            await session.delete(block)
+        await session.flush()
+
+        refreshed = await day_service.refresh_blocks(session, user, MIDDAY)
+        assert refreshed is not None
+        await task_service.recompute_capacity(session, user, refreshed)
+        await session.commit()
+
+        assert refreshed.is_indeterminate is True
+        assert refreshed.indeterminate_reason == "no_focus_blocks"
+        assert refreshed.capacity_base_minutes == 0
+
+    async def test_a_closed_day_is_never_refreshed(self, session, user):
+        """A scored day is history. A later block edit must not rewrite it."""
+        day = await day_service.open_day(session, user, ANCHOR)
+        day.closed_at = utcnow()
+        day.verdict = "failure"
+        await session.commit()
+        before = dict(day.shape_snapshot)
+
+        session.add(
+            PreferenceBlock(
+                user_id=user.id,
+                kind="deep_work",
+                start_offset_minutes=60,
+                end_offset_minutes=240,
+            )
+        )
+        await session.commit()
+
+        assert await day_service.refresh_blocks(session, user, MIDDAY) is None
+        await session.refresh(day)
+        assert dict(day.shape_snapshot) == before
+        assert day.verdict == "failure"
+
+    async def test_nothing_happens_in_the_gap_between_days(self, session, user):
+        await day_service.open_day(session, user, ANCHOR)
+        await session.commit()
+        gap = datetime(2026, 3, 11, 9, 0, tzinfo=ZoneInfo("Asia/Kolkata")).astimezone(UTC)
+        assert await day_service.refresh_blocks(session, user, gap) is None
+
+    async def test_an_unopened_day_is_not_materialized(self, session, user):
+        """Editing settings must not open a day the user has not reached yet."""
+        assert await day_service.refresh_blocks(session, user, MIDDAY) is None
+        count = await session.scalar(select(func.count()).select_from(LogicalDay))
+        assert count == 0
 
 
 class TestAppendOnly:

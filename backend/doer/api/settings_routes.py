@@ -13,6 +13,7 @@ from doer.db import get_session
 from doer.models import PreferenceBlock, User
 from doer.models.user import FOCUS_KINDS
 from doer.schemas.day import BlockIn, BlockOut, DayShapeUpdate
+from doer.services import calendar, day_service, task_service
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -34,6 +35,23 @@ async def _all_blocks(session: AsyncSession, user: User) -> list[PreferenceBlock
         .order_by(PreferenceBlock.start_offset_minutes)
     )
     return list(result.scalars())
+
+
+async def _apply_to_open_day(session: AsyncSession, user: User) -> None:
+    """Make a block edit count today rather than only from tomorrow.
+
+    Blocks are not day shape. AC-13 freezes the shape so a day that has already
+    been scored cannot be rewritten, and says nothing about blocks. The dashboard
+    tells a user with no focus blocks to go and define one, which is only honest
+    if doing so takes effect on the day they are looking at.
+
+    The stored availability is passed back in so a calendar-connected user keeps
+    their busy time subtracted instead of seeing the threshold jump.
+    """
+    day = await day_service.refresh_blocks(session, user)
+    if day is None:
+        return
+    await task_service.recompute_capacity(session, user, day, busy=calendar.stored_busy(day))
 
 
 @router.patch("/day-shape")
@@ -105,6 +123,7 @@ async def create_block(
     )
     session.add(block)
     await session.flush()
+    await _apply_to_open_day(session, user)
     return _serialize(block)
 
 
@@ -123,6 +142,8 @@ async def delete_block(
     if block is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "block not found")
     await session.delete(block)
+    await session.flush()
+    await _apply_to_open_day(session, user)
 
 
 def _reject_overlap(

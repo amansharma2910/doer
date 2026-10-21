@@ -23,8 +23,17 @@ entire warning.
 ### The logical day
 
 `logical_days` rows, not derivations. Each carries `anchor_date`, resolved
-`start_at`/`end_at`, real `duration_minutes`, and a frozen `shape_snapshot` of the
-day shape and preference blocks as they were at open.
+`start_at`/`end_at`, real `duration_minutes`, and a `shape_snapshot` taken at open.
+
+The snapshot has two halves and they do not behave the same way. The day shape
+(start time, duration, timezone, capacity ratio) is frozen: editing it applies from
+the next logical day, so a day that has been scored cannot be rewritten (AC-13).
+The preference blocks are refreshed in place when they are edited, by
+`day_service.refresh_blocks` called from the settings write path, which then
+recomputes capacity. Adding a first focus block has to clear the "set up a work
+block" nudge on the day the user is looking at rather than the next one
+(`docs/fixes/fix_plan_stale-block-snapshot.md`). Closed days are never refreshed,
+and a settings edit never materializes a day that has not been opened yet.
 
 Duration is wall-clock, so `day_bounds` localizes both the naive start and the
 naive end and takes the real difference. A 15-hour day spanning a spring-forward

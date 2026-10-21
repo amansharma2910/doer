@@ -259,6 +259,51 @@ class TestTaskLifecycleOverHttp:
 
 
 class TestSettingsOverHttp:
+    async def test_a_first_block_clears_the_nudge_without_waiting_for_tomorrow(
+        self, client, session
+    ):
+        """The default path for a new account: the dashboard opens the day before
+        settings can be reached, so the day is snapshotted with no blocks."""
+        user = User(
+            google_sub="carol",
+            email="carol@example.com",
+            timezone="UTC",
+            day_start_time=time(0, 0),
+            day_duration_minutes=24 * 60,
+            capacity_ratio=0.5,
+        )
+        session.add(user)
+        await session.flush()
+        token = "token-carol"
+        session.add(
+            AuthSession(
+                user_id=user.id,
+                token_hash=hashlib.sha256(token.encode()).hexdigest(),
+                expires_at=datetime.now(UTC) + timedelta(days=1),
+            )
+        )
+        await session.commit()
+
+        first = await client.get("/days/current", headers=auth(token))
+        assert first.status_code == 200
+        assert first.json()["is_indeterminate"] is True
+        assert first.json()["indeterminate_reason"] == "no_focus_blocks"
+
+        created = await client.post(
+            "/settings/blocks",
+            headers=auth(token),
+            json={"kind": "deep_work", "start_offset_minutes": 60, "end_offset_minutes": 360},
+        )
+        assert created.status_code == 201
+
+        second = await client.get("/days/current", headers=auth(token))
+        assert second.status_code == 200
+        body = second.json()
+        assert body["is_indeterminate"] is False
+        assert body["indeterminate_reason"] is None
+        assert body["threshold_minutes"] == 150, "300 minutes of focus at a 50% ratio"
+
+
     async def test_overlapping_blocks_are_refused(self, client, alice):
         _, token = alice
         response = await client.post(

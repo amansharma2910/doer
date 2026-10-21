@@ -63,7 +63,7 @@ async def fetch_busy(
     return capacity.merge_intervals(intervals)
 
 
-def _stored(day: LogicalDay) -> list[tuple[datetime, datetime]]:
+def stored_busy(day: LogicalDay) -> list[tuple[datetime, datetime]]:
     return [
         (datetime.fromisoformat(s), datetime.fromisoformat(e)) for s, e in (day.busy_snapshot or [])
     ]
@@ -145,7 +145,7 @@ async def _degrade(
     state: str,
     keep: bool = False,
 ) -> LogicalDay:
-    busy = _stored(day) if keep else []
+    busy = stored_busy(day) if keep else []
     await task_service.recompute_capacity(session, user, day, busy=busy, calendar_state=state)
     return day
 

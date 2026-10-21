@@ -17,6 +17,14 @@ Known gaps between what the documents promise and what the code does.
    needs a deliberate carve-out before Doer has anyone else on it. Removing a test
    user currently requires disabling the trigger for the statement.
 
+3. **Calendar busy time is un-subtracted by any task mutation.** Nine of the eleven
+   `recompute_capacity` call sites pass no `busy`, so `capacity.compute` subtracts
+   zero and `busy_minutes_subtracted` is wiped. `calendar.sync_day` only re-applies
+   it when the snapshot is stale, so a calendar-connected user's threshold reads
+   high from the next task write until the following day. Found while fixing
+   `docs/fixes/fix_plan_stale-block-snapshot.md` and deliberately left alone there;
+   it needs its own fix plan.
+
 Closed on 2026-10-21: carry-forward demotions are now surfaced in the task list;
 a frontend test suite exists (Vitest, 18 tests covering the heatmap colour rules
 and contract-refusal decoding); and migrations run on container start.
@@ -190,9 +198,10 @@ decision rather than by accident (`docs/adr/0001-local-first-fastapi-monolith.md
 
 **The logical day is the spine.** Every task, completion, score, and heatmap cell
 resolves through a materialized `logical_days` row keyed on `(user_id, anchor_date)`
-rather than through a timestamp. The row freezes the day shape, capacity base, and
-threshold at open, so changing settings tomorrow cannot rewrite what today was
-measured against. A day's real duration is computed by wall-clock arithmetic in the
+rather than through a timestamp. The row freezes the day shape at open, so changing
+it tomorrow cannot rewrite what today was measured against. Preference block edits
+are the deliberate exception: they refresh onto the open day and recompute capacity,
+because the dashboard asks a user with no focus blocks to go and define one. A day's real duration is computed by wall-clock arithmetic in the
 user's timezone, which makes a DST day genuinely 14 or 16 hours rather than 15.
 
 **Three guarantees are enforced in the database, not in code.** A unique constraint
