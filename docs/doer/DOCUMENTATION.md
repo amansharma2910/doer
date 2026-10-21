@@ -26,7 +26,7 @@ Known gaps between what the documents promise and what the code does.
    it needs its own fix plan.
 
 Closed on 2026-10-21: carry-forward demotions are now surfaced in the task list;
-a frontend test suite exists (Vitest, 72 tests covering the heatmap colour rules
+a frontend test suite exists (Vitest, 74 tests covering the heatmap colour rules
 and contract-refusal decoding); and migrations run on container start.
 
 ## 1. Project Structure
@@ -53,7 +53,7 @@ doer/
 │       └── services/       day, task, close, capacity, calendar, estimation,
 │                           assistant, metrics, google_oauth, token_store, llm
 └── frontend/src/
-    ├── App.tsx             auth gate and router
+    ├── App.tsx             auth gate and router: offline, loading, sign-in, outage
     ├── lib/                api client, typed hooks, wire types
     ├── pages/              SignIn, Dashboard, Settings
     └── components/         TaskList (dnd), AddTask, Chat, Heatmap
@@ -136,6 +136,21 @@ Frontend: everything network goes through `lib/api.ts`, and everything stateful
 through `lib/hooks.ts`. `useTaskMutation` invalidates tasks, day, and heatmap
 together, because any task change can move capacity.
 
+Two cache rules that are load-bearing and easy to get wrong:
+
+- **Tearing the cache down uses `resetQueries`, never `clear()`.** `clear()`
+  destroys the query objects but leaves mounted observers attached to the dead
+  ones, still reporting their last success, so React is never notified and the
+  page freezes on stale data. Nothing sequenced after a `clear()` can reach those
+  observers. `hooks.ts` exports `signOutTeardown(queryClient)` for this, as a
+  plain function rather than a hook so it is testable without a DOM. The
+  reasoning is specific to `@tanstack/react-query` 5.104.5, which the lockfile
+  resolves from a `^5.59.0` range. See
+  `docs/fixes/fix_plan_signout-leaves-page-frozen.md`.
+- **The global query defaults live in `main.tsx`**: `retry: 1` and
+  `refetchOnWindowFocus: true`. They decide the request burst on sign-out, and
+  the focus refetch is part of why the `clear()` defect could not self-heal.
+
 ## 4. Setup and Run
 
 ```bash
@@ -166,16 +181,16 @@ docker compose exec db psql -U doer -d doer
 ### Tests
 
 ```bash
-docker compose --profile test run --rm tests   # 205 tests, in a container
+docker compose --profile test run --rm tests   # 208 tests, in a container
 
 cd backend && uv sync --group dev              # or on the host
 docker compose exec db psql -U doer -d postgres -c "create database doer_test"
-uv run pytest             # 205 tests, deterministic and offline
+uv run pytest             # 208 tests, deterministic and offline
 uv run pytest -m live     # 7 more that call the real model and cost money
 ```
 
 ```bash
-cd frontend && pnpm test  # 72 tests: heatmap colour rules, error decoding
+cd frontend && pnpm test  # 74 tests: heatmap rules, error decoding, sign-out teardown
 ```
 
 The suite drops and re-migrates the schema of the database it is pointed at, so
@@ -245,7 +260,10 @@ the app correct after a week of not being opened.
 raw focus-block capacity and marks the day as computed without calendar data. An API
 failure keeps the last snapshot and marks it stale. Missing focus blocks or
 unestimated primaries make a day *indeterminate* rather than safe, because unknown
-capacity must never read as headroom.
+capacity must never read as headroom. The client degrades deliberately too: a
+paused fetch renders "Offline. Waiting for a connection." rather than the
+API-outage message, so the application never blames the server for the browser's
+connection.
 
 **Estimation is durable without a worker.** State lives on the task row, an attempt
 runs inline, and an in-process sweeper retries what is due. The sweep logic sits

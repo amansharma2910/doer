@@ -259,6 +259,42 @@ class TestTaskLifecycleOverHttp:
         assert response.status_code == 409
 
 
+class TestLogout:
+    """The endpoint existed since M1 with no coverage and no way to reach it."""
+
+    async def test_logout_ends_the_session(self, client, alice):
+        _, token = alice
+        assert (await client.get("/auth/me", headers=auth(token))).status_code == 200
+
+        response = await client.post("/auth/logout", headers=auth(token))
+        assert response.status_code == 200
+        assert response.json() == {"ok": True}
+
+        after = await client.get("/auth/me", headers=auth(token))
+        assert after.status_code == 401, "the token must not survive its own session row"
+
+    async def test_logout_removes_only_that_session(self, client, session, alice):
+        """Signing out in one browser must not sign the user out everywhere."""
+        user, token = alice
+        other = "token-alice-second-browser"
+        session.add(
+            AuthSession(
+                user_id=user.id,
+                token_hash=hashlib.sha256(other.encode()).hexdigest(),
+                expires_at=datetime.now(UTC) + timedelta(days=1),
+            )
+        )
+        await session.commit()
+
+        await client.post("/auth/logout", headers=auth(token))
+
+        assert (await client.get("/auth/me", headers=auth(other))).status_code == 200
+
+    async def test_logout_without_a_session_is_not_an_error(self, client):
+        """The cookie can already be gone; the caller still wants to end up signed out."""
+        assert (await client.post("/auth/logout")).status_code == 200
+
+
 class TestSettingsOverHttp:
     async def test_a_first_block_clears_the_nudge_without_waiting_for_tomorrow(
         self, client, session

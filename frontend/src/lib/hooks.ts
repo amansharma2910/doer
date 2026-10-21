@@ -1,4 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  type QueryClient,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { api } from "./api";
 import type {
   HeatmapGrid,
@@ -82,6 +87,29 @@ function useTaskMutation<TArgs>(fn: (args: TArgs) => Promise<unknown>) {
       queryClient.invalidateQueries({ queryKey: keys.day });
       queryClient.invalidateQueries({ queryKey: ["heatmap"] });
     },
+  });
+}
+
+/** Empties every cached query on the way out, so the next account to sign in on
+    this browser cannot see a flash of the previous one's day.
+
+    `resetQueries`, not `clear()`. `clear()` destroys the Query objects but leaves
+    mounted observers attached to the dead ones, still reporting the old success,
+    so React is never told anything changed and the page sits frozen on a
+    signed-out dashboard. Nothing sequenced after a `clear()` can reach those
+    observers either. Exported as a plain function so the behaviour is testable
+    without a DOM. See docs/fixes/fix_plan_signout-leaves-page-frozen.md. */
+export function signOutTeardown(queryClient: QueryClient) {
+  return queryClient.resetQueries();
+}
+
+export function useLogout() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api<{ ok: boolean }>("/auth/logout", { method: "POST" }),
+    // Fires on failure too, which is deliberate: a sign-out that fails must not
+    // leave a frozen dashboard behind either.
+    onSettled: () => signOutTeardown(queryClient),
   });
 }
 

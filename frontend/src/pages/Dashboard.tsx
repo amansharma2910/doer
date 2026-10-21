@@ -7,6 +7,7 @@ import { ApiError } from "../lib/api";
 import {
   formatMinutes,
   useDay,
+  useLogout,
   useRefreshCalendar,
   useReverseCompletion,
   useTasks,
@@ -32,6 +33,7 @@ export function Dashboard({ user }: { user: User }) {
             Settings
           </Link>
           <span title={user.email}>{user.name ?? user.email}</span>
+          <SignOut />
         </nav>
       </header>
 
@@ -65,6 +67,21 @@ export function Dashboard({ user }: { user: User }) {
 
       <AddTask primariesUsed={primariesUsed} />
     </div>
+  );
+}
+
+/** No confirmation: signing out destroys the session row, not any data, and
+    signing back in is one click. */
+function SignOut() {
+  const logout = useLogout();
+  return (
+    <button
+      onClick={() => logout.mutate()}
+      disabled={logout.isPending}
+      className="hover:text-[var(--color-ink)] disabled:opacity-40"
+    >
+      Sign out
+    </button>
   );
 }
 

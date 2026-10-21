@@ -54,6 +54,7 @@ v1 scope. The implementation is complete.
 - [x] stale-block-snapshot: Preference block edits did not reach the day in progress, so the "set up a work block" nudge survived the user acting on it (fix: high, status: verified)
 - [x] heatmap-utc-date-shift: The history grid was labelled in UTC while cells are keyed by anchor dates in the user's timezone, so every label ran a day early (fix: high, status: verified)
 - [x] tests-wipe-production-database: The suite dropped the schema of whatever DATABASE_URL named, and the api container names production, so running it destroyed all application data (fix: critical, status: verified)
+- [x] signout-leaves-page-frozen: queryClient.clear() orphaned the mounted observers on stale success, so signing out left the dashboard on screen until a manual reload (fix: high, status: verified)
 
 ## Business Objective Coverage
 
@@ -119,10 +120,10 @@ Recorded here because each changed a commitment made in an earlier document.
 Checked on 2026-10-21 rather than asserted:
 
 - All 21 acceptance criteria (AC-01 to AC-21) have at least one automated test.
-- All 76 named test cases (T-*) in plan §11.3 are implemented. 205 backend tests
-  plus 72 frontend tests as of 2026-10-21; 7 live tests excluded from the default
-  run. The earlier figures here (190 and 18) were stale and disagreed with
-  `docs/doer/DOCUMENTATION.md`.
+- All 76 named test cases (T-*) in plan §11.3 are implemented. 208 backend tests
+  plus 74 frontend tests as of 2026-10-21, the last check of the day; 7 live tests
+  excluded from the default run. Figures here have been stale twice in one day, so
+  treat any count in a document as the date it carries, not as current.
 - All 31 events in the tracking plan are emitted by the code.
 - The runtime container builds and serves both the SPA and the API.
 
@@ -154,11 +155,23 @@ Checked on 2026-10-21 rather than asserted:
    `docs/setup/gcp_setup.md` line 130 about the database host, which sends a
    reader following one of them to a connection failure and the other to
    production.
-7. **Fix plan wanted for the busy-subtraction wipe.** Nine of the eleven
+7. **Sign-out is unplanned and unmeasured.** Plan v1 §4 lists no requirement for
+   session termination and AC-01 to AC-21 contain no criterion for it, so the
+   control fills an unenumerated gap rather than satisfying a commitment. It also
+   emits no event, where sign-in emits `user_signed_in`, so the tracking plan's
+   31-event inventory is unchanged while a new user-facing transition exists.
+   Worth a decision in metrics-mode rather than a silent asymmetry.
+8. **qa-mode wanted for `docs/user_testing_documentation.md`.** Flow 1 step 1.5
+   told a tester to sign out when no control existed, so it was not performable
+   as written; it is now, but asserts nothing about the fixed behaviour. Flow 12.7
+   is false and was false before today: offline, the app never mounts the
+   dashboard, so neither the stale snapshot nor the staleness indicator can be
+   observed. No flow covers sign-out at all.
+9. **Fix plan wanted for the busy-subtraction wipe.** Nine of the eleven
    `recompute_capacity` call sites pass no `busy`, inflating a calendar-connected
    user's threshold after any task write. Found during the stale-block-snapshot
    analysis and deliberately left out of that fix's scope.
-8. **Post-launch review** after 30 scored days: re-enter metrics-mode, answer the
+10. **Post-launch review** after 30 scored days: re-enter metrics-mode, answer the
    five questions in tracking plan §6 in order, and write the verdict back.
-9. **release-mode** only if and when deployment is wanted. That is a v2 decision,
+11. **release-mode** only if and when deployment is wanted. That is a v2 decision,
    and ADR 0001 names Cloud Run plus managed Postgres as the indicated path.

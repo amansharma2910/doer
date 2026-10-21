@@ -6,9 +6,14 @@ import { Settings } from "./pages/Settings";
 import { SignIn } from "./pages/SignIn";
 
 export function App() {
-  const { data: user, isLoading, error } = useMe();
+  const { data: user, isPending, isPaused, error } = useMe();
 
-  if (isLoading) return <Centered>Loading</Centered>;
+  // `isPending`, not `isLoading`. The latter is `isPending && isFetching`, so a
+  // query that is pending with no fetch in flight falls past the 401 branch into
+  // the API-outage message below, blaming the server for the browser's
+  // connection.
+  if (isPaused) return <Centered>Offline. Waiting for a connection.</Centered>;
+  if (isPending) return <Centered>Loading</Centered>;
 
   if (error instanceof ApiError && error.status === 401) {
     return <SignIn href={loginUrl} />;

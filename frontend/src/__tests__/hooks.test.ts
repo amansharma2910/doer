@@ -1,5 +1,6 @@
+import { QueryClient, QueryObserver, notifyManager } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
-import { isAwaitingEstimate } from "../lib/hooks";
+import { isAwaitingEstimate, keys, signOutTeardown } from "../lib/hooks";
 import type { Task } from "../lib/types";
 
 function task(partial: Partial<Task> = {}): Task {
@@ -52,5 +53,54 @@ describe("deciding when to keep polling for an estimate", () => {
     const mixed = [...settled, task()];
     expect(settled.some(isAwaitingEstimate)).toBe(false);
     expect(mixed.some(isAwaitingEstimate)).toBe(true);
+  });
+});
+
+describe("sign-out teardown", () => {
+  /** Subscribed the way useBaseQuery subscribes: optimistic results, batched
+      notifications. Without that the observer behaves differently from the one
+      React actually mounts, and the bug this covers hides. */
+  function mountedObserver(client: QueryClient, queryFn: () => Promise<unknown>) {
+    const observer = new QueryObserver(client, {
+      queryKey: keys.me,
+      queryFn,
+      retry: false,
+      _optimisticResults: "optimistic",
+    });
+    const unsubscribe = observer.subscribe(notifyManager.batchCalls(() => {}));
+    return { observer, unsubscribe };
+  }
+
+  it("leaves a signed-out observer off its stale success", async () => {
+    const client = new QueryClient();
+    let signedIn = true;
+    const queryFn = async () => {
+      if (!signedIn) throw new Error("401");
+      return { email: "someone@example.com" };
+    };
+
+    const { observer, unsubscribe } = mountedObserver(client, queryFn);
+    await observer.refetch();
+    expect(observer.getCurrentResult().data).toEqual({ email: "someone@example.com" });
+
+    // The server has destroyed the session; the next read must not succeed.
+    signedIn = false;
+    await signOutTeardown(client);
+
+    const result = observer.getCurrentResult();
+    expect(
+      result.status === "success" && result.data !== undefined,
+      "the observer is still reporting the signed-out user, so the page stays frozen",
+    ).toBe(false);
+    unsubscribe();
+  });
+
+  it("leaves no other account data behind", async () => {
+    const client = new QueryClient();
+    client.setQueryData(keys.tasks, [{ title: "the previous account's task" }]);
+
+    await signOutTeardown(client);
+
+    expect(client.getQueryData(keys.tasks)).toBeUndefined();
   });
 });

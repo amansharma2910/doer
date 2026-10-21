@@ -121,7 +121,7 @@ cookie and return **401** without it.
 |---|---|---|
 | GET | `/auth/google/login` | 307 to Google. `?force_consent=true` forces a new refresh token |
 | GET | `/auth/google/callback` | 307 to the frontend, sets the session cookie |
-| POST | `/auth/logout` | |
+| POST | `/auth/logout` | 200 `{"ok": true}`. Destroys only the calling session, so other browsers stay signed in. Idempotent: 200 with no cookie |
 | GET | `/auth/me` | |
 | PATCH | `/settings/day-shape` | **409** if an existing block would fall outside the new duration |
 | GET POST | `/settings/blocks` | **409** overlap, **422** past the end of the day |
