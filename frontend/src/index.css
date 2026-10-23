@@ -73,9 +73,16 @@
   /* The bottom band, where the mobile tab bar and the entry dock both live.
      Four files used to hard-code their own values here while a comment in
      Nav.tsx claimed one of them was the single source. Tokens make that claim
-     true: `h-tabbar` sets the bar, `pb-tabbar` reserves it, `bottom-dock`
+     true: `h-tabbar` sets the bar, `pb-tabbar-clear` reserves it, `bottom-dock`
      lifts the dock clear of it, and `pb-dock` reserves room for the dock. */
   --spacing-tabbar: 3.5rem;
+  /* The bar height plus the 2.5rem of bottom rhythm `sm:pb-10` gives the
+     desktop layout. Reserving the bar height alone is what `pb-tabbar` used to
+     do, and it left the last line of a page flush against the bar's top border
+     with no gap at all, which reads as the navigation overlapping the page.
+     Clearing a fixed element means clearing it *and* keeping the margin the
+     layout would have had anyway. */
+  --spacing-tabbar-clear: 6rem;
   --spacing-dock: 7rem;
 
   /* ── Radius ────────────────────────────────────────────────────────────

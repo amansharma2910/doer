@@ -21,7 +21,7 @@ export function AppShell({ user }: { user: User }) {
           screen with something floating over it reserves its own room: Today
           does, for the entry dock, and History and Settings would otherwise
           have carried 11rem of dead space for a control they do not show. */}
-      <main className="mx-auto w-full max-w-2xl flex-1 px-gutter pb-tabbar pt-8 sm:pb-10">
+      <main className="mx-auto w-full max-w-2xl flex-1 px-gutter pb-tabbar-clear pt-8 sm:pb-10">
         <Outlet />
       </main>
 

@@ -216,7 +216,21 @@ describe("the bottom band is one token, not four agreeing numbers (D4)", () => {
 
   it("defines the band as spacing tokens", () => {
     expect(css).toContain("--spacing-tabbar:");
+    expect(css).toContain("--spacing-tabbar-clear:");
     expect(css).toContain("--spacing-dock:");
+  });
+
+  it("reserves more than the bar's own height, so content is not flush against it", () => {
+    // The original defect: `pb-tabbar` reserved exactly `h-tabbar`, so the last
+    // line of a compact page sat on the bar's top border with no gap, and the
+    // navigation read as overlapping the page. Clearing a fixed element means
+    // clearing it and keeping the margin the layout would have had anyway.
+    const rem = (name: string) => {
+      const found = css.match(new RegExp(`--spacing-${name}:\\s*([\\d.]+)rem`));
+      expect(found).toBeTruthy();
+      return Number(found![1]);
+    };
+    expect(rem("tabbar-clear")).toBeGreaterThan(rem("tabbar"));
   });
 
   it("is consumed by every file that occupies the band", async () => {
@@ -231,7 +245,7 @@ describe("the bottom band is one token, not four agreeing numbers (D4)", () => {
       sources.find(([path]) => path.endsWith(name))?.[1] ?? "";
 
     expect(find("Nav.tsx")).toContain("h-tabbar");
-    expect(find("AppShell.tsx")).toContain("pb-tabbar");
+    expect(find("AppShell.tsx")).toContain("pb-tabbar-clear");
     expect(find("TaskEntry.tsx")).toContain("bottom-dock");
     expect(find("Today.tsx")).toContain("pb-dock");
   });

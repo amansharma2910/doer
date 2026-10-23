@@ -331,51 +331,51 @@ function BlocksEditor({ user }: { user: User }) {
               end on the next reads as two unrelated fields rather than a range,
               and the pair is narrow enough to sit together even at 375px. */}
           <div className="flex items-end gap-x-5">
-          <label className="flex flex-col gap-1">
-            <span className="text-note text-muted">From</span>
-            <ClockInput
-              label="Block start"
-              value={from}
-              minuteStep={30}
-              onChange={(next) => {
-                edited.current = true;
-                setFrom(next);
-                // Carry the end along rather than leaving a dead end the app
-                // already knows how to resolve.
-                const adjusted = endForStart(next, to, dayStart, user.day_duration_minutes);
-                if (adjusted) setTo(adjusted);
-              }}
-              className="border-b border-line pb-1"
-            />
-          </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-note text-muted">From</span>
+              <ClockInput
+                label="Block start"
+                value={from}
+                minuteStep={30}
+                onChange={(next) => {
+                  edited.current = true;
+                  setFrom(next);
+                  // Carry the end along rather than leaving a dead end the app
+                  // already knows how to resolve.
+                  const adjusted = endForStart(next, to, dayStart, user.day_duration_minutes);
+                  if (adjusted) setTo(adjusted);
+                }}
+                className="border-b border-line pb-1"
+              />
+            </label>
 
-          <label className="flex flex-col gap-1">
-            <span className="text-note text-muted">
-              Until{" "}
-              <span className="opacity-70">
-                (to {dayEndClock(dayStart, user.day_duration_minutes)} at the latest)
+            <label className="flex flex-col gap-1">
+              <span className="text-note text-muted">
+                Until{" "}
+                <span className="opacity-70">
+                  (to {dayEndClock(dayStart, user.day_duration_minutes)} at the latest)
+                </span>
               </span>
-            </span>
-            <ClockInput
-              label="Block end"
-              value={to}
-              minuteStep={30}
-              onChange={(next) => {
-                edited.current = true;
-                setTo(next);
-              }}
-              onCommit={(settled) => {
-                // Cap at the end of the day once the edit is finished rather than
-                // mid-keystroke: typing 1 on the way to 14 momentarily reads
-                // 01:00, which the cap would otherwise rewrite to the day's end.
-                // Clamped against the settled value rather than `to`, which a
-                // digit resolving in this same event has not yet updated.
-                const capped = clampEndToDay(from, settled, dayStart, user.day_duration_minutes);
-                if (capped) setTo(capped);
-              }}
-              className="border-b border-line pb-1"
-            />
-          </label>
+              <ClockInput
+                label="Block end"
+                value={to}
+                minuteStep={30}
+                onChange={(next) => {
+                  edited.current = true;
+                  setTo(next);
+                }}
+                onCommit={(settled) => {
+                  // Cap at the end of the day once the edit is finished rather than
+                  // mid-keystroke: typing 1 on the way to 14 momentarily reads
+                  // 01:00, which the cap would otherwise rewrite to the day's end.
+                  // Clamped against the settled value rather than `to`, which a
+                  // digit resolving in this same event has not yet updated.
+                  const capped = clampEndToDay(from, settled, dayStart, user.day_duration_minutes);
+                  if (capped) setTo(capped);
+                }}
+                className="border-b border-line pb-1"
+              />
+            </label>
           </div>
 
           <button
