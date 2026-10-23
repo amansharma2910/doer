@@ -155,6 +155,28 @@ function BlocksEditor({ user }: { user: User }) {
     "start" in range ? findOverlap(range.start, range.end, blocks) : null;
   const valid = "start" in range && collision === null;
 
+  /**
+   * Refetch everything a block edit can move.
+   *
+   * Two properties, both learned the hard way and both held by
+   * `useTaskMutation` already.
+   *
+   * It runs on `onSettled`, not `onSuccess`, so the interface reconciles with
+   * the server even when the client believes the request failed. A delete that
+   * committed server-side while the browser saw a transport error used to leave
+   * the row on screen indefinitely.
+   *
+   * It invalidates the day and the heatmap as well as the blocks, because the
+   * server recomputes the open day's capacity on every block create and delete
+   * (`_apply_to_open_day`). Invalidating only the blocks left Today showing
+   * committed-against-fits figures for a day shape that no longer existed.
+   */
+  function refreshAfterBlockChange() {
+    queryClient.invalidateQueries({ queryKey: keys.blocks });
+    queryClient.invalidateQueries({ queryKey: ["day"] });
+    queryClient.invalidateQueries({ queryKey: ["heatmap"] });
+  }
+
   const add = useMutation({
     mutationFn: () => {
       if (!("start" in range)) throw new Error("invalid range");
@@ -170,15 +192,25 @@ function BlocksEditor({ user }: { user: User }) {
     onSuccess: () => {
       // Hand the form back to the suggestion logic, so it moves to the next free
       // stretch instead of sitting on the range it just created and reporting an
-      // overlap against the user's own new block.
+      // overlap against the user's own new block. Only on success: there is no
+      // new block to move past if the add was refused.
       edited.current = false;
-      queryClient.invalidateQueries({ queryKey: keys.blocks });
     },
+    onSettled: refreshAfterBlockChange,
   });
 
   const remove = useMutation({
-    mutationFn: (id: string) => api<void>(`/settings/blocks/${id}`, { method: "DELETE" }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.blocks }),
+    mutationFn: (id: string) => {
+      // Claim the form before the request goes out. Without this the suggestion
+      // effect fires on the refetched list, `firstFreeGap` returns the slot the
+      // delete just freed, and the dashed window reappears exactly where the
+      // block was, still carrying its kind. A successful delete then looks
+      // identical to a failed one. The effect was written for the add case,
+      // where moving to the next free stretch is the point.
+      edited.current = true;
+      return api<void>(`/settings/blocks/${id}`, { method: "DELETE" });
+    },
+    onSettled: refreshAfterBlockChange,
   });
 
   const focusMinutes = blocks
@@ -270,6 +302,12 @@ function BlocksEditor({ user }: { user: User }) {
           </li>
         )}
       </ul>
+
+      {remove.error instanceof ApiError && (
+        <p className="mt-2 text-note text-risk">
+          That block could not be removed. {remove.error.message}
+        </p>
+      )}
 
       <div className="mt-6 rounded-control border border-line p-4">
         <div className="flex flex-wrap items-end gap-x-5 gap-y-3 text-body">
