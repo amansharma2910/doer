@@ -1,9 +1,9 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
 import { api, ApiError } from "../lib/api";
 import { ClockInput } from "../components/ClockInput";
 import { DayTimeline } from "../components/DayTimeline";
+import { Problem, Waiting } from "../components/states";
 import {
   clampEndToDay,
   dayEndClock,
@@ -25,18 +25,21 @@ import {
 } from "../lib/types";
 
 export function Settings({ user }: { user: User }) {
+  // No page container and no Back link: the shell supplies the column, and the
+  // navigation bar is a better way back than a one-way link to Today was.
   return (
-    <div className="mx-auto max-w-2xl px-6 py-12">
-      <header className="flex items-baseline justify-between">
-        <h1 className="text-xl font-medium tracking-tight">Settings</h1>
-        <Link to="/" className="text-xs text-[var(--color-muted)] hover:text-[var(--color-ink)]">
-          Back
-        </Link>
+    <>
+      <header className="border-b border-line pb-4">
+        <h1 className="text-body font-medium">Settings</h1>
+        <p className="mt-1 text-note text-muted">
+          When your day runs, and how it is divided. Both feed what Doer thinks you
+          can take on.
+        </p>
       </header>
 
       <DayShapeForm user={user} />
       <BlocksEditor user={user} />
-    </div>
+    </>
   );
 }
 
@@ -64,10 +67,10 @@ function DayShapeForm({ user }: { user: User }) {
   const endsAt = computeEnd(startTime, hours);
 
   return (
-    <section className="mt-10">
-      <h2 className="text-xs uppercase tracking-wide text-[var(--color-muted)]">Your day</h2>
+    <section className="mt-section">
+      <h2 className="text-note uppercase tracking-wide text-muted">Your day</h2>
 
-      <div className="mt-4 flex flex-wrap items-end gap-6 text-sm">
+      <div className="mt-4 flex flex-wrap items-end gap-6 text-body">
         <Field label="Starts">
           <ClockInput
             label="Day start"
@@ -85,7 +88,7 @@ function DayShapeForm({ user }: { user: User }) {
             onChange={(e) => setHours(Number(e.target.value))}
             className="w-16 bg-transparent tabular-nums outline-none"
           />
-          <span className="ml-1 text-[var(--color-muted)]">hours</span>
+          <span className="ml-1 text-muted">hours</span>
         </Field>
         <Field label="Comfortable load">
           <input
@@ -97,25 +100,30 @@ function DayShapeForm({ user }: { user: User }) {
             onChange={(e) => setLoadPercent(Number(e.target.value))}
             className="w-14 bg-transparent tabular-nums outline-none"
           />
-          <span className="ml-1 text-[var(--color-muted)]">% of focus time</span>
+          <span className="ml-1 text-muted">% of focus time</span>
         </Field>
       </div>
 
-      <p className="mt-3 text-xs text-[var(--color-muted)]">
-        Your day ends at {endsAt}. Changes apply from your next day, never to one
-        already underway.
+      {/* Was a sentence. The end time is derived from two fields a few
+          centimetres away, so it belongs beside them as a figure. The caveat
+          that follows it is the only part that needed words. */}
+      <dl className="mt-4 flex flex-wrap gap-x-8 gap-y-2">
+        <Derived label="Ends at" value={endsAt} />
+      </dl>
+      <p className="mt-2 text-note text-muted">
+        Changes apply from your next day, never to one already underway.
       </p>
 
       <button
         onClick={() => save.mutate()}
-        className="mt-4 rounded-md border border-[var(--color-line)] px-3 py-1.5 text-xs
-                   hover:bg-black/[0.03] dark:hover:bg-white/[0.05]"
+        className="mt-4 rounded-control border border-line px-3 py-1.5 text-note
+                   hover:bg-wash"
       >
         {save.isPending ? "Saving" : "Save"}
       </button>
 
       {save.error instanceof ApiError && (
-        <p className="mt-2 text-xs text-[var(--color-risk)]">{String(save.error.message)}</p>
+        <p className="mt-2 text-note text-risk">{String(save.error.message)}</p>
       )}
     </section>
   );
@@ -123,7 +131,7 @@ function DayShapeForm({ user }: { user: User }) {
 
 function BlocksEditor({ user }: { user: User }) {
   const queryClient = useQueryClient();
-  const { data: blocks = [] } = useBlocks();
+  const { data: blocks = [], isPending, error } = useBlocks();
 
   const dayStart = user.day_start_time.slice(0, 5);
   const [kind, setKind] = useState<PreferenceKind>("deep_work");
@@ -179,16 +187,24 @@ function BlocksEditor({ user }: { user: User }) {
   const thresholdMinutes = Math.round(focusMinutes * user.capacity_ratio);
 
   return (
-    <section className="mt-14">
-      <h2 className="text-xs uppercase tracking-wide text-[var(--color-muted)]">
+    <section className="mt-section">
+      <h2 className="text-note uppercase tracking-wide text-muted">
         How your day is split
       </h2>
-      <p className="mt-2 max-w-prose text-xs leading-relaxed text-[var(--color-muted)]">
+      <p className="mt-2 max-w-prose text-note leading-relaxed text-muted">
         Mark out when you work, when you are on personal projects, and when you are
-        off. Only <span className="text-[var(--color-ink)]">work</span> and{" "}
-        <span className="text-[var(--color-ink)]">personal project</span> time counts
+        off. Only <span className="text-ink">work</span> and{" "}
+        <span className="text-ink">personal project</span> time counts
         toward what Doer thinks you can take on.
       </p>
+
+      {isPending && <Waiting>Loading how your day is split.</Waiting>}
+      {error && (
+        <Problem title="Your blocks could not be loaded.">
+          The timeline below shows an empty day, which is not necessarily what you
+          have configured.
+        </Problem>
+      )}
 
       <DayTimeline
         blocks={blocks}
@@ -214,50 +230,55 @@ function BlocksEditor({ user }: { user: User }) {
         }}
       />
 
-      <ul className="mt-5 space-y-1 text-sm">
+      <ul className="mt-5 space-y-1 text-body">
         {blocks.map((block) => (
-          <li key={block.id} className="group flex items-center gap-3 py-1">
+          <li key={block.id} className="flex items-start gap-3 py-1">
             <span
               className={
-                "h-2.5 w-2.5 shrink-0 rounded-sm " +
+                "h-2.5 w-2.5 shrink-0 rounded-mark " +
                 (block.is_focus
-                  ? "bg-[color-mix(in_srgb,var(--color-success)_55%,transparent)]"
-                  : "bg-[color-mix(in_srgb,var(--color-muted)_28%,transparent)]")
+                  ? "bg-focus-block"
+                  : "bg-rest-block")
               }
             />
-            <span className="w-36 shrink-0">{PREFERENCE_LABELS[block.kind]}</span>
-            <span className="tabular-nums text-[var(--color-muted)]">
-              {offsetToClock(block.start_offset_minutes, dayStart)} to{" "}
-              {offsetToClock(block.end_offset_minutes, dayStart)}
+            {/* Wraps instead of holding a fixed 9rem label column. At 375px the
+                old row came to roughly 350px of content in 327px of space. */}
+            <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3">
+              <span className="sm:w-36">{PREFERENCE_LABELS[block.kind]}</span>
+              <span className="tabular-nums text-muted">
+                {offsetToClock(block.start_offset_minutes, dayStart)} to{" "}
+                {offsetToClock(block.end_offset_minutes, dayStart)}
+              </span>
+              <span className="text-note text-muted">
+                {formatDuration(block.end_offset_minutes - block.start_offset_minutes)}
+              </span>
             </span>
-            <span className="text-xs text-[var(--color-muted)]">
-              {formatDuration(block.end_offset_minutes - block.start_offset_minutes)}
-            </span>
+            {/* Always present. Revealing it on hover made it unreachable by
+                touch, which M12 makes a defect rather than a trade-off. */}
             <button
               onClick={() => remove.mutate(block.id)}
-              className="ml-auto text-xs text-[var(--color-muted)] opacity-0
-                         transition-opacity hover:text-[var(--color-failure)] group-hover:opacity-100"
+              className="shrink-0 text-note text-muted transition-colors hover:text-failure"
             >
               Remove
             </button>
           </li>
         ))}
         {blocks.length === 0 && (
-          <li className="text-sm text-[var(--color-muted)]">
+          <li className="text-body text-muted">
             Nothing marked out yet. Add a work block below and Doer can start telling
             you what fits.
           </li>
         )}
       </ul>
 
-      <div className="mt-6 rounded-md border border-[var(--color-line)] p-4">
-        <div className="flex flex-wrap items-end gap-x-5 gap-y-3 text-sm">
+      <div className="mt-6 rounded-control border border-line p-4">
+        <div className="flex flex-wrap items-end gap-x-5 gap-y-3 text-body">
           <label className="flex flex-col gap-1">
-            <span className="text-xs text-[var(--color-muted)]">What kind of time</span>
+            <span className="text-note text-muted">What kind of time</span>
             <select
               value={kind}
               onChange={(e) => setKind(e.target.value as PreferenceKind)}
-              className="border-b border-[var(--color-line)] bg-transparent pb-1 outline-none"
+              className="border-b border-line bg-transparent pb-1 outline-none"
             >
               {Object.entries(PREFERENCE_LABELS).map(([value, label]) => (
                 <option key={value} value={value}>
@@ -268,8 +289,12 @@ function BlocksEditor({ user }: { user: User }) {
             </select>
           </label>
 
+          {/* From and Until are one wrap unit. A start time on one row and its
+              end on the next reads as two unrelated fields rather than a range,
+              and the pair is narrow enough to sit together even at 375px. */}
+          <div className="flex items-end gap-x-5">
           <label className="flex flex-col gap-1">
-            <span className="text-xs text-[var(--color-muted)]">From</span>
+            <span className="text-note text-muted">From</span>
             <ClockInput
               label="Block start"
               value={from}
@@ -282,12 +307,12 @@ function BlocksEditor({ user }: { user: User }) {
                 const adjusted = endForStart(next, to, dayStart, user.day_duration_minutes);
                 if (adjusted) setTo(adjusted);
               }}
-              className="border-b border-[var(--color-line)] pb-1"
+              className="border-b border-line pb-1"
             />
           </label>
 
           <label className="flex flex-col gap-1">
-            <span className="text-xs text-[var(--color-muted)]">
+            <span className="text-note text-muted">
               Until{" "}
               <span className="opacity-70">
                 (to {dayEndClock(dayStart, user.day_duration_minutes)} at the latest)
@@ -310,22 +335,22 @@ function BlocksEditor({ user }: { user: User }) {
                 const capped = clampEndToDay(from, settled, dayStart, user.day_duration_minutes);
                 if (capped) setTo(capped);
               }}
-              className="border-b border-[var(--color-line)] pb-1"
+              className="border-b border-line pb-1"
             />
           </label>
+          </div>
 
           <button
             onClick={() => add.mutate()}
             disabled={!valid}
-            className="rounded-md border border-[var(--color-line)] px-3 py-1.5 text-xs
-                       transition-colors hover:bg-black/[0.03] disabled:opacity-40
-                       dark:hover:bg-white/[0.05]"
+            className="rounded-control border border-line px-3 py-1.5 text-note
+                       transition-colors hover:bg-wash disabled:opacity-40"
           >
             Add block
           </button>
         </div>
 
-        <p className="mt-3 text-xs text-[var(--color-muted)]">
+        <p className="mt-3 text-note text-muted">
           {valid && "start" in range ? (
             <>
               {formatDuration(range.end - range.start)} of{" "}
@@ -333,7 +358,7 @@ function BlocksEditor({ user }: { user: User }) {
               {range.end === user.day_duration_minutes && " Runs to the very end of your day."}
             </>
           ) : collision ? (
-            <span className="text-[var(--color-risk)]">
+            <span className="text-risk">
               That overlaps your{" "}
               {PREFERENCE_LABELS[collision.kind as PreferenceKind].toLowerCase()} block
               at {offsetToClock(collision.start_offset_minutes, dayStart)} to{" "}
@@ -341,47 +366,68 @@ function BlocksEditor({ user }: { user: User }) {
               share time.
             </span>
           ) : "error" in range && range.error.kind === "start_outside_day" ? (
-            <span className="text-[var(--color-risk)]">
+            <span className="text-risk">
               That starts outside your day, which runs {range.error.dayStartsAt} to{" "}
               {range.error.dayEndsAt}.
             </span>
           ) : "error" in range && range.error.kind === "past_day_end" ? (
-            <span className="text-[var(--color-risk)]">
+            <span className="text-risk">
               That ends at {range.error.endsAt}, past the {range.error.dayEndsAt} end
               of your day. Anything up to {range.error.dayEndsAt} works, including
               after midnight.
             </span>
           ) : "error" in range && range.error.kind === "unreadable" ? (
-            <span className="text-[var(--color-risk)]">
+            <span className="text-risk">
               Finish typing both times before adding the block.
             </span>
           ) : (
-            <span className="text-[var(--color-risk)]">Pick an end time after the start.</span>
+            <span className="text-risk">Pick an end time after the start.</span>
           )}
         </p>
 
         {add.error instanceof ApiError && (
-          <p className="mt-2 text-xs text-[var(--color-risk)]">{add.error.message}</p>
+          <p className="mt-2 text-note text-risk">{add.error.message}</p>
         )}
       </div>
 
+      {/* Three numbers, where four lines of prose said the same thing. The one
+          element the user marked unnecessary on 2026-10-23; the figures it
+          carried are kept, the sentences around them are not. */}
       {focusMinutes > 0 && (
-        <p className="mt-5 max-w-prose text-xs leading-relaxed text-[var(--color-muted)]">
-          That is {formatDuration(focusMinutes)} of focus time a day. At{" "}
-          {Math.round(user.capacity_ratio * 100)}%, Doer will quietly flag any day you
-          commit to more than {formatDuration(thresholdMinutes)} of work, before
-          meetings are taken off.
-        </p>
+        <dl className="mt-6 flex flex-wrap gap-x-8 gap-y-2 border-t border-line pt-4">
+          <Derived label="Focus time a day" value={formatDuration(focusMinutes)} />
+          {/* Comfortable load is not repeated here. It is a field a few
+              centimetres above, and a figure that only echoes an input is
+              noise wearing the costume of a summary. */}
+          <Derived
+            label="Flagged above"
+            value={formatDuration(thresholdMinutes)}
+            note={`at ${Math.round(user.capacity_ratio * 100)}%, before meetings`}
+          />
+        </dl>
       )}
     </section>
+  );
+}
+
+/** A number the app worked out, rather than one you typed. */
+function Derived({ label, value, note }: { label: string; value: string; note?: string }) {
+  return (
+    <div>
+      <dt className="text-note uppercase tracking-wide text-muted">{label}</dt>
+      <dd className="mt-0.5 text-body tabular-nums">
+        {value}
+        {note && <span className="ml-1 text-note text-muted">{note}</span>}
+      </dd>
+    </div>
   );
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-xs text-[var(--color-muted)]">{label}</span>
-      <span className="border-b border-[var(--color-line)] pb-1">{children}</span>
+      <span className="text-note text-muted">{label}</span>
+      <span className="border-b border-line pb-1">{children}</span>
     </label>
   );
 }

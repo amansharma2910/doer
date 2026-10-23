@@ -503,3 +503,45 @@ export function stepEdge(
   const next = forward ? onward[0] : onward[onward.length - 1];
   return edge === "start" ? { start: next, end } : { start, end: next };
 }
+
+/**
+ * An anchor date as a person would say it.
+ *
+ * `2026-10-23` is a database value, not a day. It was the heading of the main
+ * screen, set in the recessed label style, which is how the one thing that
+ * identifies the page came to read as a throwaway.
+ *
+ * Split and reassembled rather than passed to `new Date("2026-10-23")`, which
+ * parses a bare date as UTC midnight. West of Greenwich that renders as the
+ * previous day, which is exactly the class of defect that
+ * `fix_plan_heatmap-utc-date-shift.md` already records once.
+ */
+export function formatAnchorDate(anchor: string, today?: string): string {
+  // Matched strictly rather than split and coerced. `Number("")` is 0 rather
+  // than NaN, so "--" passed a NaN guard, and `new Date(2026, 12, 45)` rolls
+  // over to the following February rather than failing, so a range check after
+  // construction never fires either. Together those rendered "2026-13-45" as a
+  // confident "Sunday, February 14" above an error message.
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(anchor);
+  if (!match) return anchor;
+  const [year, month, day] = match.slice(1).map(Number);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return anchor;
+  const date = new Date(year, month - 1, day);
+  // Round-trip: anything that rolled over is not the date it was given.
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+    return anchor;
+  }
+
+  const label = date.toLocaleDateString(undefined, {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+  return today === anchor ? `Today, ${label}` : label;
+}
+
+/** The anchor-date string for the caller's current local date. */
+export function localAnchorToday(now: Date = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}

@@ -188,7 +188,7 @@ export function ClockInput({
         max={23}
         spoken={String(hour).padStart(2, "0")}
       />
-      <span aria-hidden="true" className="px-px text-[var(--color-muted)]">
+      <span aria-hidden="true" className="px-px text-muted">
         :
       </span>
       <Part
@@ -250,10 +250,10 @@ function Part({
       aria-valuetext={spoken}
       tabIndex={active ? 0 : -1}
       className={
-        "cursor-default rounded-sm px-0.5 outline-none " +
+        "cursor-default rounded-mark px-0.5 outline-none " +
         "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 " +
-        "focus-visible:outline-[var(--color-ink)] " +
-        (active ? "bg-[var(--color-ink)] text-[var(--color-paper)]" : "")
+        "focus-visible:outline-focus " +
+        (active ? "bg-ink text-paper" : "")
       }
     >
       {text}

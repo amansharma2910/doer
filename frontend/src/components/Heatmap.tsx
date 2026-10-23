@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { colorFor, type View } from "../lib/heatmap";
 import { useHeatmap } from "../lib/hooks";
 import type { HeatmapCell } from "../lib/types";
-
-export type View = "count" | "verdict";
 const WEEKS = 26;
 
 /**
@@ -32,10 +32,11 @@ export function Heatmap() {
   for (let i = 0; i < days.length; i += 7) weeks.push(days.slice(i, i + 7));
 
   return (
-    <section className="mt-12">
-      <div className="flex items-baseline justify-between">
-        <h2 className="text-xs uppercase tracking-wide text-[var(--color-muted)]">History</h2>
-        <div className="flex gap-3 text-xs">
+    // The heading moved to the History screen when this stopped being the fifth
+    // section of a page and became the whole of one.
+    <section aria-label="Activity heatmap">
+      <div className="flex items-baseline justify-end">
+        <div className="flex gap-3 text-note">
           <ViewButton active={view === "count"} onClick={() => setView("count")}>
             Tasks done
           </ViewButton>
@@ -76,48 +77,27 @@ function Cell({
   cell: HeatmapCell | undefined;
   view: View;
 }) {
+  const shape =
+    "h-[11px] w-[11px] rounded-mark ring-1 ring-inset ring-hairline";
+
   // A placeholder while the server's dates are in flight: same footprint and the
   // same empty ring, so the grid does not reflow or flash when they land.
-  if (!date) {
-    return (
-      <span className="h-[11px] w-[11px] rounded-[2px] ring-1 ring-inset ring-black/[0.04] dark:ring-white/[0.06]" />
-    );
-  }
+  if (!date) return <span className={shape} />;
 
+  // Every dated cell is a link, including a day with no row. The detail screen
+  // answers "nothing was scheduled" far better than a `title` attribute, which
+  // on touch could not be read at all.
   return (
-    <span
+    <Link
+      to={`/history/${date}`}
+      aria-label={describe(date, cell)}
       title={describe(date, cell)}
       style={{ background: colorFor(cell, view) }}
-      className="h-[11px] w-[11px] rounded-[2px] ring-1 ring-inset ring-black/[0.04] dark:ring-white/[0.06]"
+      className={`${shape} block transition-transform hover:scale-150
+                  focus-visible:outline focus-visible:outline-2
+                  focus-visible:outline-offset-1 focus-visible:outline-focus`}
     />
   );
-}
-
-export function colorFor(cell: HeatmapCell | undefined, view: View): string {
-  if (!cell) return "transparent";
-
-  // At-risk overrides both views. It is the one signal that is about the plan
-  // rather than the outcome, and it reads the same wherever you are looking.
-  if (cell.is_at_risk) return "var(--color-risk)";
-
-  if (view === "count") {
-    const total = cell.completed_total;
-    if (total === 0) return "transparent";
-    // Opacity rises with the count and saturates at five.
-    const strength = Math.min(total, 5) / 5;
-    return `color-mix(in srgb, var(--color-success) ${20 + strength * 80}%, transparent)`;
-  }
-
-  switch (cell.verdict) {
-    case "success":
-      return "var(--color-success)";
-    case "failure":
-      return "var(--color-failure)";
-    default:
-      // Neutral and unscheduled days are deliberately uncoloured. A day with one
-      // primary is not a failure, and a day with none is not an outcome at all.
-      return "transparent";
-  }
 }
 
 function describe(date: string, cell: HeatmapCell | undefined): string {
@@ -133,7 +113,7 @@ function describe(date: string, cell: HeatmapCell | undefined): string {
 
 function Legend({ view }: { view: View }) {
   return (
-    <p className="mt-3 text-xs text-[var(--color-muted)]">
+    <p className="mt-3 text-note text-muted">
       {view === "count"
         ? "Brighter means more finished that day, counting everything, not just the four."
         : "Green kept the day (three of four). Red did not. Uncoloured days had too little scheduled to score."}
@@ -155,8 +135,8 @@ function ViewButton({
       onClick={onClick}
       className={
         active
-          ? "font-medium text-[var(--color-ink)]"
-          : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+          ? "font-medium text-ink"
+          : "text-muted hover:text-ink"
       }
     >
       {children}

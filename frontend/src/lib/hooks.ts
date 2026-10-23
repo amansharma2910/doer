@@ -17,7 +17,12 @@ import type {
 export const keys = {
   me: ["me"] as const,
   day: ["day", "current"] as const,
-  tasks: ["tasks"] as const,
+  dayAt: (anchor: string) => ["day", anchor] as const,
+  /** The open day's tasks. Parameterised so a past day can be cached beside it
+      rather than overwriting it. `current` rather than `undefined` keeps the
+      key a tuple of strings, which is what `tasksCurrent` below relies on. */
+  tasks: ["tasks", "current"] as const,
+  tasksAt: (anchor: string) => ["tasks", anchor] as const,
   blocks: ["blocks"] as const,
   heatmap: (weeks: number) => ["heatmap", weeks] as const,
 };
@@ -45,6 +50,12 @@ export function useDay() {
     retry: false,
     // An arriving estimate moves committed minutes and can flip the at-risk flag,
     // so the day follows the same cadence as the tasks it summarizes.
+    //
+    // This reaches into the tasks cache by key, which couples the two. When
+    // `keys.tasks` gained its "current" segment for the History screen, a
+    // lookup left on the old flat key would have returned undefined and the
+    // day would have silently stopped following the estimate cadence, with
+    // nothing failing. T-IO-37 exists for exactly that.
     refetchInterval: () =>
       queryClient.getQueryData<Task[]>(keys.tasks)?.some(isAwaitingEstimate)
         ? ESTIMATE_POLL_MS
@@ -60,6 +71,25 @@ export function useTasks() {
     // last estimate lands or gives up.
     refetchInterval: (query) =>
       query.state.data?.some(isAwaitingEstimate) ? ESTIMATE_POLL_MS : false,
+  });
+}
+
+/** A past day's summary. 404 means there was never a day on that anchor,
+    which the interface shows as nothing-scheduled rather than as an error. */
+export function useDayAt(anchor: string) {
+  return useQuery<LogicalDay>({
+    queryKey: keys.dayAt(anchor),
+    queryFn: () => api<LogicalDay>(`/days/${anchor}`),
+    retry: false,
+  });
+}
+
+/** A past day's tasks. Never polls: a closed day's estimates are settled. */
+export function useTasksAt(anchor: string) {
+  return useQuery<Task[]>({
+    queryKey: keys.tasksAt(anchor),
+    queryFn: () => api<Task[]>(`/tasks?anchor=${anchor}`),
+    retry: false,
   });
 }
 
@@ -83,8 +113,10 @@ function useTaskMutation<TArgs>(fn: (args: TArgs) => Promise<unknown>) {
   return useMutation({
     mutationFn: fn,
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: keys.tasks });
-      queryClient.invalidateQueries({ queryKey: keys.day });
+      // By prefix, so both the open day and any past day on screen refresh.
+      // A completion can move a verdict, which the History grid shows.
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["day"] });
       queryClient.invalidateQueries({ queryKey: ["heatmap"] });
     },
   });
@@ -124,6 +156,20 @@ export function useCreateTask() {
 
 export function useCompleteTask() {
   return useTaskMutation((id: string) => api<Task>(`/tasks/${id}/complete`, { method: "POST" }));
+}
+
+/**
+ * Begin a task.
+ *
+ * Idempotent at the API: `start_task` returns the task unchanged if it is
+ * already started or already complete, so the interface may call it without
+ * guarding first. There is deliberately no counterpart: nothing clears
+ * `started_at`, which is why more than one task may be in progress at once.
+ * Blocking the second start would trap a mis-start with no way out. See
+ * AC-IO-14.
+ */
+export function useStartTask() {
+  return useTaskMutation((id: string) => api<Task>(`/tasks/${id}/start`, { method: "POST" }));
 }
 
 export function useReverseCompletion() {

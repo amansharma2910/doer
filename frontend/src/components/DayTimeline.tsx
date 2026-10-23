@@ -129,7 +129,7 @@ export function DayTimeline({
       <div className="relative">
         <div
           ref={barRef}
-          className="relative h-9 w-full overflow-hidden rounded-md border border-[var(--color-line)] bg-black/[0.03] dark:bg-white/[0.03]"
+          className="relative h-9 w-full overflow-hidden rounded-control border border-line bg-wash"
         >
           {blocks.map((block) => (
             <div
@@ -140,10 +140,10 @@ export function DayTimeline({
                 width: `${percent(block.end_offset_minutes - block.start_offset_minutes)}%`,
               }}
               className={
-                "absolute inset-y-0 border-r border-[var(--color-paper)] " +
+                "absolute inset-y-0 border-r border-paper " +
                 (block.is_focus
-                  ? "bg-[color-mix(in_srgb,var(--color-success)_55%,transparent)]"
-                  : "bg-[color-mix(in_srgb,var(--color-muted)_28%,transparent)]")
+                  ? "bg-focus-block"
+                  : "bg-rest-block")
               }
             />
           ))}
@@ -164,12 +164,12 @@ export function DayTimeline({
               className={
                 "absolute inset-y-0 border-2 border-dashed " +
                 (preview.invalid
-                  ? "border-[var(--color-failure)] bg-[var(--color-failure)]/15"
-                  : "border-[var(--color-ink)] bg-[var(--color-ink)]/10") +
+                  ? "border-failure bg-failure/15"
+                  : "border-ink bg-ink/10") +
                 (draggable
                   ? " pointer-events-auto cursor-grab touch-none select-none active:cursor-grabbing" +
                     " focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" +
-                    " focus-visible:outline-[var(--color-ink)]"
+                    " focus-visible:outline-focus"
                   : "")
               }
               tabIndex={draggable ? 0 : undefined}
@@ -211,7 +211,7 @@ export function DayTimeline({
         </div>
       </div>
 
-      <div className="mt-1 flex justify-between text-[11px] tabular-nums text-[var(--color-muted)]">
+      <div className="mt-1 flex justify-between text-caption tabular-nums text-muted">
         <span>{offsetToClock(0, dayStart)}</span>
         <span>{formatDuration(dayDurationMinutes)} long</span>
         <span>{offsetToClock(dayDurationMinutes, dayStart)}</span>
@@ -255,10 +255,10 @@ function Handle({
         " before:absolute before:inset-y-1 before:left-1/2 before:w-0.5 before:-translate-x-1/2" +
         " before:rounded-full before:content-['']" +
         (invalid
-          ? " before:bg-[var(--color-failure)]"
-          : " before:bg-[var(--color-ink)]") +
+          ? " before:bg-failure"
+          : " before:bg-ink") +
         " focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1" +
-        " focus-visible:outline-[var(--color-ink)]"
+        " focus-visible:outline-focus"
       }
       {...handlers}
     />

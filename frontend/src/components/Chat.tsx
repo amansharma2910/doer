@@ -3,11 +3,13 @@ import { formatMinutes, useChat, useConfirmProposal } from "../lib/hooks";
 import { PREFERENCE_LABELS, type ProposedTask } from "../lib/types";
 
 /**
- * Collapsed by default, and it never commits anything on its own. The assistant
- * returns a proposal; tasks exist only once the user confirms.
+ * The assistant path: describe the day, get a proposal, confirm it.
+ *
+ * It never commits anything on its own. The proposal is editable and nothing
+ * exists until confirmed, which is the contract that separates this from the
+ * direct path sitting beside it in the dock.
  */
-export function Chat() {
-  const [open, setOpen] = useState(false);
+export function ChatPanel({ onDone }: { onDone: () => void }) {
   const [message, setMessage] = useState("");
   const [turnId, setTurnId] = useState<string | null>(null);
   const [proposed, setProposed] = useState<ProposedTask[] | null>(null);
@@ -53,26 +55,14 @@ export function Chat() {
     );
   }
 
-  if (!open) {
-    return (
-      <button
-        onClick={() => setOpen(true)}
-        className="text-xs text-[var(--color-muted)] hover:text-[var(--color-ink)]"
-      >
-        Talk to Doer
-      </button>
-    );
-  }
-
   return (
-    <div className="rounded-md border border-[var(--color-line)] p-4">
+    <div>
       <div className="flex items-baseline justify-between">
-        <h3 className="text-xs uppercase tracking-wide text-[var(--color-muted)]">Doer</h3>
-        <button
-          onClick={() => setOpen(false)}
-          className="text-xs text-[var(--color-muted)] hover:text-[var(--color-ink)]"
-        >
-          Close
+        <p className="text-note text-muted">
+          Describe the day. Doer proposes tasks; nothing is added until you confirm.
+        </p>
+        <button onClick={onDone} className="text-note text-muted hover:text-ink">
+          Cancel
         </button>
       </div>
 
@@ -82,30 +72,32 @@ export function Chat() {
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           placeholder="What do you want to get done today?"
-          className="w-full border-b border-[var(--color-line)] bg-transparent pb-2 text-sm
-                     outline-none placeholder:text-[var(--color-muted)]"
+          aria-label="Message to Doer"
+          onKeyDown={(e) => e.key === "Escape" && onDone()}
+          className="w-full border-b border-line bg-transparent pb-2 text-body
+                     outline-none placeholder:text-muted"
         />
       </form>
 
       {chat.isPending && (
-        <p className="mt-3 text-xs text-[var(--color-muted)]">Thinking</p>
+        <p className="mt-3 text-note text-muted">Thinking</p>
       )}
 
       {chat.isError && (
-        <p className="mt-3 text-xs text-[var(--color-risk)]">
-          Doer is unavailable right now. The plus button still works.
+        <p className="mt-3 text-note text-risk">
+          Doer is unavailable right now. Adding a task directly still works.
         </p>
       )}
 
       {proposed && proposed.length === 0 && (
-        <p className="mt-3 text-xs text-[var(--color-muted)]">
+        <p className="mt-3 text-note text-muted">
           Nothing task-shaped in that, so nothing was added.
         </p>
       )}
 
       {proposed && proposed.length > 0 && (
         <div className="mt-4 space-y-2">
-          <p className="text-xs text-[var(--color-muted)]">
+          <p className="text-note text-muted">
             Nothing has been added yet. Edit anything, then confirm.
           </p>
           {proposed.map((task, index) => (
@@ -113,19 +105,23 @@ export function Chat() {
               <input
                 value={task.title}
                 onChange={(e) => editTitle(index, e.target.value)}
-                className="min-w-0 flex-1 border-b border-[var(--color-line)] bg-transparent
-                           pb-1 text-sm outline-none"
+                className="min-w-0 flex-1 border-b border-line bg-transparent
+                           pb-1 text-body outline-none"
               />
-              <span className="shrink-0 text-xs text-[var(--color-muted)]">
+              <span className="shrink-0 text-note text-muted">
                 {PREFERENCE_LABELS[task.preference_kind]} · {formatMinutes(task.estimate_minutes)}
               </span>
             </div>
           ))}
-          <div className="flex justify-end gap-3 pt-2 text-xs">
-            <button onClick={discard} className="text-[var(--color-muted)]">
+          <div className="flex justify-end gap-3 pt-2 text-note">
+            <button onClick={discard} className="text-muted">
               Discard
             </button>
-            <button onClick={commit} className="font-medium">
+            <button
+              onClick={commit}
+              className="rounded-control border border-line px-3 py-1.5 font-medium
+                         transition-colors hover:bg-wash"
+            >
               Add {proposed.length === 1 ? "it" : `all ${proposed.length}`}
             </button>
           </div>

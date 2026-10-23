@@ -289,3 +289,133 @@ puts the half hours at 14:30 and 15:00.
 **Reporting note.** If AM or PM appears anywhere at all, or if an hour refuses to
 pass 12, record the step and your computer's language and region settings. Those
 settings used to decide this behaviour and no longer should.
+
+---
+
+## Interface Overhaul Flows (18 to 24)
+
+These flows cover the `interface-overhaul` work. Each is tagged with the delivery
+phase whose boundary it gates: a phase is not finished until its flows pass, which
+is acceptance criterion AC-IO-01.
+
+Flows 1 to 17 above still apply. Several describe the old two-page layout and name
+"the dashboard"; read that as the **Today** screen. Where an older flow says a
+control is revealed by hovering a task row, that is exactly what Flow 21 checks has
+changed.
+
+### Flow 18: Navigation and the three screens **[P1]**
+
+| Step | Action | Expected result |
+|---|---|---|
+| 18.1 | Sign in and look at where you land. | You are on **Today**. The address bar reads `/today`. |
+| 18.2 | Type `http://localhost:5173/` and press enter. | You arrive at Today, and the address bar reads `/today`. |
+| 18.3 | Find the navigation. | Today, History and Settings are all visible at once. You can tell which one you are on without reading the page content. |
+| 18.4 | Click each of the three in turn. | Each loads its own screen. Nothing flashes a loading state for data that was already on screen a moment ago. |
+| 18.5 | Press the browser Back button twice. | You return through the screens you visited, in order. |
+| 18.6 | Open `http://localhost:5173/settings` directly. | Settings loads. This path worked before the overhaul and must still work. |
+| 18.7 | Type a path that does not exist, such as `/nonsense`. | Today loads. No error page. |
+| 18.8 | Reach every screen using only the Tab and Enter keys. | Possible, and the focused item is always visibly marked. |
+| 18.9 | Sign out. | The navigation disappears along with the rest of the app, and you land on the sign-in screen. It must not linger. |
+| 18.10 | Stop the API with `docker compose stop api`, then reload. | You see the API-unreachable message, with **no navigation bar**. Restart with `docker compose start api`. |
+| 18.11 | Turn off your network, then reload. | You see the offline message, not the API-unreachable one. The difference matters: one blames your connection, the other blames the server. |
+
+### Flow 19: Dark mode, contrast and width **[P1]**
+
+The colour half of this flow failed when it was written, which is why it exists.
+Four of the seven colours changed with the scheme and three did not; all eight
+roles now do, and three values moved to clear WCAG AA, which they did not before
+in either scheme. Run it as verification, not as a known failure.
+
+| Step | Action | Expected result |
+|---|---|---|
+| 19.1 | Set your operating system to light mode and open Today. | Light background, dark text. |
+| 19.2 | Switch the system to dark mode without reloading. | The whole app follows immediately. |
+| 19.3 | In dark mode, over-commit the day so the risk dot appears. | The orange dot is clearly legible against the dark background. It must not look washed out or glaring. |
+| 19.4 | In dark mode, complete a task and look at the green marker. | Legible against dark, not a light-mode green sitting on a dark panel. |
+| 19.5 | In dark mode, open History and look at the heatmap. | Every filled square is legible. Compare against light mode: both should read well, neither should look like the other mode's colours borrowed. |
+| 19.6 | In dark mode, trigger an error, for example by adding a fifth primary task. | The warning text is legible against dark. |
+| 19.7 | Narrow the browser window to 375px wide. Visit all three screens. | Nothing is cut off and the page never scrolls sideways. Only up and down. |
+| 19.8 | At 375px, find the section links (Today, History, Settings). | They are in a bar along the bottom of the screen, reachable with a thumb, and they appear in exactly one place. The slim bar at the top stays, carrying only the Doer name, your name and Sign out. That is correct: the sections move, the header does not. |
+| 19.9 | Widen to full screen and revisit all three. | Navigation is back at the top. Content does not stretch into one unreadably wide line. |
+| 19.10 | At 375px, open History. | The heatmap fits or scrolls sideways **within its own box**. The page itself still must not scroll sideways. |
+| 19.11 | At 375px, open Settings and use the day timeline. | The timeline is usable by touch. Blocks can be read and removed. |
+
+### Flow 20: The four-slot day header **[P2]**
+
+| Step | Action | Expected result |
+|---|---|---|
+| 20.1 | Start a day with no tasks and look at the top of Today. | Four empty slots. The first two are marked differently from the last two. |
+| 20.2 | Add one task as one of today's four. | One slot fills. The marking on the first two slots is still visible, and the header indicates the day cannot be scored yet. |
+| 20.3 | Add a second. | Two slots filled, and the scoring-floor marking is **gone**. The day can now be scored. |
+| 20.4 | Add a third and a fourth. | Three then four slots filled. At four, the header says so. |
+| 20.5 | Try to add a fifth as one of the four. | Refused, with a message offering a way forward. The control that enacts that way forward is **clickable**, not greyed out. |
+| 20.6 | Click that control. | The task is added as an extra. This is the single most important step in this flow: a greyed-out remedy was a real defect once. |
+| 20.7 | Add enough work to exceed the time your day holds. | A small orange dot appears near the day. |
+| 20.8 | Watch for anything else. | **Nothing else happens.** No popup, no banner, no sound, no browser notification, no red. If anything demands your attention, that is a failure. |
+| 20.9 | Remove work until you are back under. | The dot disappears. |
+| 20.10 | Read the two time figures under the slots. | They say what you have committed and what comfortably fits. Both in hours and minutes, not decimals. |
+
+### Flow 21: Task rows, entry and starting work **[P2]**
+
+| Step | Action | Expected result |
+|---|---|---|
+| 21.1 | Look at a task row **without moving your mouse over it**. | Start, Edit, Promote and Delete are all visible as icons. They were invisible until hover before this change, which is what this step exists to catch. |
+| 21.2 | On a phone or in a touch simulator, tap a task row's actions. | They work. There is no hover on touch, so a control only reachable by hover is unreachable. |
+| 21.3 | Tab to a task row and operate its actions with the keyboard alone. | Each action is reachable and activatable. The focused one is visibly marked. |
+| 21.4 | Find the two ways to add a task. | Both are visible and read as a pair. One adds what you type directly; the other proposes tasks for you to confirm. Which is which is obvious without clicking. |
+| 21.5 | Add a task with the direct path. | It appears immediately in the list. |
+| 21.6 | Use the assistant path and describe two or three things in a sentence. | Proposed tasks appear. **Nothing is added yet.** |
+| 21.7 | Edit one proposal's title, then confirm. | Exactly what is on screen is what gets added. |
+| 21.8 | Repeat 21.6 and choose to discard. | Nothing is added. |
+| 21.9 | Start a task. | The row changes to show it is in progress, and elapsed time is shown. |
+| 21.10 | Start a second task while the first is still running. | Allowed. Both show as in progress. This is deliberate: there is no way to un-start a task, so blocking the second would trap you. |
+| 21.11 | Start the same task twice. | Nothing happens the second time and no error appears. |
+| 21.12 | Complete a task you started, wait a few minutes first. | It moves to the completed section, and the time it actually took is recorded. |
+| 21.13 | Complete a task you never started. | It completes normally. No actual time is recorded, which is correct. |
+| 21.14 | Drag a task onto a different group heading. | The move is ignored. Tasks reorder only within their own group. |
+| 21.15 | Let tasks carry over to a new day so some are pushed out of the four. | A notice names which tasks were moved out. It must still be there. |
+
+### Flow 22: History, statistics and day detail **[P3]**
+
+| Step | Action | Expected result |
+|---|---|---|
+| 22.1 | Open History. | The heatmap has room to breathe. Both views, Tasks done and Days kept, are still switchable, and the explanation below still reads. |
+| 22.2 | Look above the heatmap. | A rolling 7-day success rate, a current streak, and days kept in the period. |
+| 22.3 | Click a square for a day on which you did work. | You go to that day's own view. The address bar shows the date. |
+| 22.4 | Read that view. | It shows what you committed, what fit, the verdict, and the tasks of that day with which were finished. |
+| 22.5 | Reload the page while on it. | The same day is still shown. The address is a real link you could send to yourself. |
+| 22.6 | Go back, then click a square for a day you never used. | A clear "nothing was scheduled" message. Not an error, not a blank screen. |
+| 22.7 | Click today's square. | Today's view opens. It is open and unscored, and says so rather than showing a verdict. |
+| 22.8 | Edit the address to a date far in the past, before you ever used the app. | Nothing-scheduled state. No error. |
+| 22.9 | Edit the address to a future date, and then to nonsense such as `/history/banana`. | Handled gracefully both times. No crash, no blank page, no raw error text. |
+| 22.10 | Check the streak against your own history. | Days you failed reset it to zero. Days with too little scheduled to score are **skipped**: they neither add to the streak nor break it. |
+| 22.11 | Have a day with a task that is still waiting for its estimate, then watch Today. | The estimate arrives on its own within a few seconds. You should never have to reload to see it. This is a known fragile coupling; report it immediately if a reload is required. |
+| 22.12 | With your day shifted past midnight, finish a task at 01:00 and check History. | It counts on the day that **began the previous afternoon**, not on the new calendar date. This is the whole point of the logical day. |
+
+### Flow 23: Settings, motion and polish **[P4]**
+
+| Step | Action | Expected result |
+|---|---|---|
+| 23.1 | Open Settings. | Day shape and the block editor. The long paragraph explaining focus time and the percentage is gone, replaced by compact figures carrying the same numbers. |
+| 23.2 | Check those figures against what the paragraph used to say. | Same numbers, fewer words. If a number is now missing rather than shortened, report it. |
+| 23.3 | Run Flow 16 and Flow 17 again in full. | Both pass unchanged. The timeline drag and the 24-hour clock fields must survive the restyle. |
+| 23.4 | Turn on "Reduce motion" in your operating system's accessibility settings and reload. | Nothing animates anywhere. Things appear and disappear instantly. |
+| 23.5 | Turn it off again. | Completing, adding and promoting a task animate smoothly. |
+| 23.6 | Open each screen with a slow connection, using the browser's network throttling. | Each shows a designed waiting state naming what it is waiting for. Not the bare word "Loading", and never a screen full of zeroes presented as real figures. |
+| 23.7 | Sign in to an account with no tasks and no blocks at all. | Each screen explains what to do next. Not a blank area and not the bare words "Nothing planned yet". |
+| 23.8 | Stop the API with `docker compose stop api`, then visit each of the three screens in turn. | Each says plainly that it could not load, and which other screens still work. None of them sits on a waiting state forever, and none shows zeroes as though they were real. Restart with `docker compose start api`. |
+
+### Flow 24: Design judgment pass **[all phases]**
+
+Like Flow 15, this has no assertion in code. It is the reason the overhaul was
+requested, and a reviewer's "no" here is a failure regardless of what else passed.
+
+| Step | Action | Expected result |
+|---|---|---|
+| 24.1 | Open Today on a normal day with three pending and one completed task. | The pending tasks are the clear focus. Completed work is present but recessed. |
+| 24.2 | Ask someone who has never seen the app to find their history, then add a task. | They manage both without being told where to look. |
+| 24.3 | Look at the type across all three screens. | Sizes form a deliberate scale. You should not be able to find two headings of the same rank at different sizes. |
+| 24.4 | Look at the spacing between sections across all three screens. | Consistent. Gaps are not visibly arbitrary. |
+| 24.5 | Compare light and dark side by side. | Both look designed. Neither reads as the other with the colours flipped. |
+| 24.6 | Use the app for one real day, end to end. | Nothing interrupted you, nothing notified you, the day's outcome was unambiguous, and opening it was not unpleasant. |
+| 24.7 | State plainly whether it still looks like it was assembled rather than designed. | If it does, say so and say where. That answer outranks every passing test above it. |

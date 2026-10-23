@@ -2,15 +2,92 @@
 
 /* Doer is deliberately quiet. The palette carries one accent for pending work,
    one for success, one for failure, and one for at-risk, and nothing else.
-   Over-commitment is signalled by colour alone: no modal, no alert, no nagging. */
+   Over-commitment is signalled by colour alone: no modal, no alert, no nagging.
+
+   Everything the interface draws with is named here. A component that reaches
+   past these tokens for a raw colour, size, radius or shadow is a bug, and
+   AC-IO-07 is the test that says so.
+
+   Two kinds of colour role, with two different contrast obligations:
+
+     text roles      ink, muted, failure, risk        WCAG AA, 4.5:1
+     mark roles      success, risk-mark               3:1, the graphic threshold
+
+   `line` is a decorative hairline and carries no threshold; a border that met
+   4.5:1 would be a rule, not a hairline. Every ratio is asserted against these
+   literal values in tokens.test.ts, so editing a colour here fails the suite
+   rather than quietly dropping below AA. */
+
 @theme {
+  /* ── Colour, light scheme ──────────────────────────────────────────────
+     Three values moved when contrast was computed rather than eyeballed, and
+     the shifts are small because hue and saturation were held:
+       muted    #8a8f98 -> #6c717a   was 3.11:1, the most-used class in the app
+       risk     #d98324 -> #a2611b   was 2.79:1, and it is used as warning text
+       success  kept, 3.26:1, a mark role and never set as text
+     risk-mark exists because the at-risk dot wants to stay orange. The text
+     value that clears 4.5:1 is brown, and a brown dot reads as a smudge. */
   --color-ink: #16181d;
   --color-paper: #fbfaf8;
-  --color-muted: #8a8f98;
+  --color-muted: #6c717a;
   --color-line: #e6e4e0;
   --color-success: #2f9e5e;
-  --color-failure: #c6483f;
-  --color-risk: #d98324;
+  --color-failure: #c5443b;
+  --color-risk: #a2611b;
+  --color-risk-mark: #c97922;
+
+  /* Surfaces. These replace eight hand-written black and white alphas that
+     were spread across eight call sites at four different opacities. */
+  --color-raised: #ffffff;
+  --color-wash: rgb(0 0 0 / 0.03);
+  --color-hairline: rgb(0 0 0 / 0.045);
+  --color-focus: #16181d;
+
+  /* Block fills. The same two color-mix recipes were written out verbatim in
+     both Settings.tsx and DayTimeline.tsx. */
+  --color-focus-block: color-mix(in srgb, var(--color-success) 55%, transparent);
+  --color-rest-block: color-mix(in srgb, var(--color-muted) 28%, transparent);
+
+  /* ── Type scale ────────────────────────────────────────────────────────
+     Five named steps. `note` and `body` are deliberately identical in size to
+     the text-xs and text-sm they replace, so adopting the scale moves no
+     pixels; it only makes the rank explicit at the call site. */
+  --text-caption: 0.6875rem;
+  --text-caption--line-height: 1rem;
+  --text-note: 0.75rem;
+  --text-note--line-height: 1.125rem;
+  --text-body: 0.875rem;
+  --text-body--line-height: 1.375rem;
+  --text-heading: 1.0625rem;
+  --text-heading--line-height: 1.5rem;
+  --text-display: 1.5rem;
+  --text-display--line-height: 1.875rem;
+
+  /* ── Spacing rhythm ────────────────────────────────────────────────────
+     Vertical rhythm previously ran mt-8, mt-10, mt-12 and mt-14 with nothing
+     choosing between them. Three named steps, and the 4px scale for the rest. */
+  --spacing-gutter: 1.5rem;
+  --spacing-section: 2.5rem;
+  --spacing-field: 0.75rem;
+
+  /* The bottom band, where the mobile tab bar and the entry dock both live.
+     Four files used to hard-code their own values here while a comment in
+     Nav.tsx claimed one of them was the single source. Tokens make that claim
+     true: `h-tabbar` sets the bar, `pb-tabbar` reserves it, `bottom-dock`
+     lifts the dock clear of it, and `pb-dock` reserves room for the dock. */
+  --spacing-tabbar: 3.5rem;
+  --spacing-dock: 7rem;
+
+  /* ── Radius ────────────────────────────────────────────────────────────
+     Five ad-hoc radii collapse to three roles. */
+  --radius-mark: 2px;
+  --radius-control: 6px;
+  --radius-panel: 12px;
+
+  /* ── Elevation ─────────────────────────────────────────────────────────
+     The whole application had two shadows, both in one file. */
+  --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.04), 0 1px 1px rgb(0 0 0 / 0.03);
+  --shadow-float: 0 8px 24px -6px rgb(0 0 0 / 0.12), 0 2px 6px rgb(0 0 0 / 0.05);
 }
 
 html,
@@ -26,11 +103,64 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Every token that carries meaning is redefined here, not four of them.
+   Leaving success, failure and risk at their light-paper values was the
+   original defect: they were chosen against #fbfaf8 and rendered against
+   #15161a, where failure sat at 3.79:1.
+
+   This overrides the custom properties rather than the utilities, which works
+   because a plain `@theme` block (not `@theme inline`) emits utilities that
+   reference the property: `.text-ink{color:var(--color-ink)}`. Verified
+   against Tailwind 4.3.3 and recorded in ADR 0003. An explicit light/dark
+   selector can be added later as another block of the same shape, with no
+   component change. */
 @media (prefers-color-scheme: dark) {
   :root {
     --color-ink: #ecebe8;
     --color-paper: #15161a;
     --color-muted: #8a8f98;
     --color-line: #2a2c32;
+    --color-success: #2f9e5e;
+    --color-failure: #d06a62;
+    --color-risk: #d98324;
+    --color-risk-mark: #d98324;
+
+    --color-raised: #1c1e23;
+    --color-wash: rgb(255 255 255 / 0.05);
+    --color-hairline: rgb(255 255 255 / 0.06);
+    --color-focus: #ecebe8;
+  }
+}
+
+/* Entry motion for list content: a short rise and fade as something arrives.
+   Keyed on mount, so a refetch that returns the same rows does not replay it,
+   and suppressed entirely by the reduced-motion block below. Nothing in this
+   application animates to attract attention; this only softens an appearance
+   that would otherwise be a jump cut. */
+@keyframes doer-enter {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@utility enter {
+  animation: doer-enter 160ms ease-out both;
+}
+
+/* Motion is opt-in to the preference, not opt-out. Suppressing it here rather
+   than per component means a transition added later cannot forget. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

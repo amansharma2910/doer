@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { colorFor } from "../components/Heatmap";
+import { colorFor } from "../lib/heatmap";
 import type { HeatmapCell } from "../lib/types";
 
 function cell(partial: Partial<HeatmapCell> = {}): HeatmapCell {
@@ -74,13 +74,13 @@ describe("heatmap view 2, verdicts (T-HEAT-03)", () => {
 describe("at-risk overrides both views (T-HEAT-04)", () => {
   it("reads orange in the count view", () => {
     expect(colorFor(cell({ is_at_risk: true, completed_total: 4 }), "count")).toBe(
-      "var(--color-risk)",
+      "var(--color-risk-mark)",
     );
   });
 
   it("reads orange in the verdict view, even on a successful day", () => {
     expect(colorFor(cell({ is_at_risk: true, verdict: "success" }), "verdict")).toBe(
-      "var(--color-risk)",
+      "var(--color-risk-mark)",
     );
   });
 });
