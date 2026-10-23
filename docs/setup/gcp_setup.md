@@ -3,7 +3,7 @@ type: setup_guide
 title: Google Cloud setup for Doer
 related_feature: daily-task-planner
 created: 2026-10-20
-updated: 2026-10-21
+updated: 2026-10-24
 ---
 
 # Google Cloud Setup for Doer
@@ -142,15 +142,21 @@ With the API running, open the sign-in route and complete consent. Then confirm 
 
 1. The token response contains a `refresh_token`, not only an `access_token`.
 2. The stored token row decrypts and a Calendar call succeeds.
-3. Signing in a second time still works without re-consent.
+3. Sign out and sign in again. You should see the account picker exactly once,
+   no consent screen, and land straight on the app. Two pickers means the stored
+   grant is not being reused; see gotcha 2.
 
-If the refresh token is missing, see gotcha 2 below.
+If the refresh token is missing on the *first* consent, see gotcha 2 below.
 
 ## 8. Gotchas, in the order they usually bite
 
 1. **Testing mode kills refresh tokens after 7 days.** Covered in section 0. The symptom is `invalid_grant` on refresh, roughly a week after things started working, which is exactly long enough to have forgotten this document.
 
-2. **A refresh token is issued only on the first consent.** The authorization URL must carry `access_type=offline`. If you have already consented once and need a fresh refresh token (for example after changing scopes), you must also send `prompt=consent`, or revoke the app at myaccount.google.com/permissions and consent again. Without this, the second authorization silently returns no refresh token and everything works until the first access token expires an hour later.
+2. **A refresh token is issued only on the first consent.** The authorization URL must carry `access_type=offline`, or none is ever issued. Every sign-in after the first returns an access token alone unless `prompt=consent` is sent.
+
+   Doer expects that and does not treat it as an error: the callback reuses the stored refresh token and completes in a single authorization leg, which is why a repeat sign-in shows one account picker rather than two. It falls back to `prompt=consent` only when there is nothing usable to reuse, meaning no token row, a row marked revoked, or the empty placeholder written before a grant is first stored.
+
+   So if you genuinely need a *new* refresh token, for example after changing scopes, signing in again will not produce one. Hit `/auth/google/login?force_consent=true` directly, or revoke the app at myaccount.google.com/permissions and consent again. See docs/fixes/fix_plan_repeat-signin-shows-account-picker-twice.md.
 
 3. **Changing scopes invalidates existing grants.** If you switch between `calendar.freebusy` and `calendar.readonly`, existing users must re-consent. Decide the scope before you accumulate real token rows.
 

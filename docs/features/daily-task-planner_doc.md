@@ -20,6 +20,34 @@ entire warning.
 
 ## 2. Implementation Detail
 
+### Sign-in and consent
+
+Google issues a refresh token only on the **first** consent for an account. Every
+sign-in after that returns an access token alone unless `prompt=consent` is sent.
+The invariant the callback is built on: that is normal, not an error. The stored
+refresh token survives sign-out (`destroy_session` deletes the `AuthSession` row
+and nothing else), so a returning user is signed in on the grant already held, in
+a single authorization leg. One account picker, no consent screen.
+
+Consent is forced again only when there is genuinely nothing to reuse: no token
+row, a row marked revoked, or the empty-bytes placeholder the row is created with
+before a grant is first stored. Those three conditions are deliberately the same
+ones `token_store.access_token_for` enforces, and the two must be changed
+together. That branch is also the only route back from a grant revoked at Google,
+which is why it was narrowed rather than removed.
+
+A forced leg that *still* returns no refresh token fails with a 502 rather than
+redirecting again. Without that guard the callback redirects to itself until the
+browser gives up.
+
+Treating the missing refresh token as fatal is what used to send every returning
+user through a second authorization leg, which rendered the account picker twice.
+See `docs/fixes/fix_plan_repeat-signin-shows-account-picker-twice.md`.
+
+`calendar_connected` fires when a previously-unusable grant becomes usable, not
+whenever a refresh token is written. A repeat sign-in connects nothing and records
+nothing.
+
 ### The logical day
 
 `logical_days` rows, not derivations. Each carries `anchor_date`, resolved
@@ -104,6 +132,9 @@ edit share is how prompt drift first appears.
 | Scoring, carry-forward, precedence | `backend/doer/services/close_service.py` |
 | Contract rules, the capacity funnel | `backend/doer/services/task_service.py` |
 | Availability and degraded modes | `backend/doer/services/calendar.py` |
+| Sign-in routes, the consent decision | `backend/doer/api/auth.py` |
+| The Google OAuth calls themselves | `backend/doer/services/google_oauth.py` |
+| Reading and refreshing the stored grant | `backend/doer/services/token_store.py` |
 | Buckets, retries, the sweeper | `backend/doer/services/estimation.py` |
 | Aggregates, cost, replay | `backend/doer/services/metrics.py` |
 | The one event writer | `backend/doer/events.py` |
@@ -120,8 +151,8 @@ cookie and return **401** without it.
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/auth/google/login` | 307 to Google. `?force_consent=true` forces a new refresh token |
-| GET | `/auth/google/callback` | 307 to the frontend, sets the session cookie |
+| GET | `/auth/google/login` | 307 to Google. `?force_consent=true` adds `prompt=consent` and marks the state so the callback can tell which leg it is on; `?login_hint=<email>` pre-selects an account. Neither is set by any user-facing surface: the callback's own recovery redirect is the only thing that sends them |
+| GET | `/auth/google/callback` | **307** to the frontend with the session cookie on success. **307** back to `/auth/google/login?force_consent=true` (no cookie, no database write) when the grant is unusable. **400** on a Google `error` or a state mismatch, **502** on a failed exchange or on a forced leg that still returns no refresh token |
 | POST | `/auth/logout` | 200 `{"ok": true}`. Destroys only the calling session, so other browsers stay signed in. Idempotent: 200 with no cookie |
 | GET | `/auth/me` | |
 | PATCH | `/settings/day-shape` | **409** if an existing block would fall outside the new duration |

@@ -7,10 +7,13 @@ holding on to that token harder, not easier.
 Two details that are easy to get wrong and expensive to debug later:
 
 - `access_type=offline` is required or no refresh token is ever issued.
-- A refresh token is returned only on the FIRST consent. After scopes change, or
-  when re-authorizing an already-consented account, `prompt=consent` is required to
-  get a new one. Without it the flow succeeds, no refresh token comes back, and
-  everything works until the access token expires an hour later.
+- A refresh token is returned only on the FIRST consent. A later sign-in by an
+  already-consented account returns an access token alone. That is survivable, not
+  an error: the stored refresh token is still good. So `exchange_code` takes
+  `allow_missing_refresh` and lets the caller decide, rather than raising and
+  sending the user back through a second `prompt=consent` authorization, which is
+  a second account picker. See
+  docs/fixes/fix_plan_repeat-signin-shows-account-picker-twice.md.
 """
 
 from __future__ import annotations
@@ -49,7 +52,12 @@ class TokenBundle:
         return utcnow() + timedelta(seconds=self.expires_in)
 
 
-def authorize_url(state: str, *, force_consent: bool = False) -> str:
+def authorize_url(
+    state: str,
+    *,
+    force_consent: bool = False,
+    login_hint: str | None = None,
+) -> str:
     settings = get_settings()
     params = {
         "client_id": settings.google_client_id,
@@ -62,10 +70,15 @@ def authorize_url(state: str, *, force_consent: bool = False) -> str:
     }
     if force_consent:
         params["prompt"] = "consent"
+    if login_hint:
+        # Only ever set on the re-consent leg, where the callback has just read the
+        # address from userinfo. The first leg runs with no session and so has no
+        # identity to hint with.
+        params["login_hint"] = login_hint
     return f"{AUTH_ENDPOINT}?{urlencode(params)}"
 
 
-async def exchange_code(code: str) -> TokenBundle:
+async def exchange_code(code: str, *, allow_missing_refresh: bool = False) -> TokenBundle:
     settings = get_settings()
     async with httpx.AsyncClient(timeout=15.0) as client:
         response = await client.post(
@@ -78,7 +91,7 @@ async def exchange_code(code: str) -> TokenBundle:
                 "grant_type": "authorization_code",
             },
         )
-    return _parse_token_response(response)
+    return _parse_token_response(response, allow_missing_refresh=allow_missing_refresh)
 
 
 async def refresh_access_token(refresh_token: str) -> TokenBundle:

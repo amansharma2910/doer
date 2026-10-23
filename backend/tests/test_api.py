@@ -10,12 +10,17 @@ from zoneinfo import ZoneInfo
 
 import httpx
 import pytest
+import respx
 from sqlalchemy import select, update
 
+from doer.api.auth import STATE_COOKIE
 from doer.api.deps import COOKIE_NAME
+from doer.config import get_settings
+from doer.crypto import decrypt, encrypt
 from doer.db import get_session
 from doer.main import create_app
-from doer.models import AuthSession, PreferenceBlock, User
+from doer.models import AuthSession, Event, OAuthToken, PreferenceBlock, User
+from doer.services.google_oauth import TOKEN_ENDPOINT, USERINFO_ENDPOINT
 
 
 async def _make_user(session, *, sub: str, email: str, tz: str = "UTC") -> tuple[User, str]:
@@ -113,6 +118,176 @@ class TestAuthentication:
         response = await client.get("/auth/me", headers=auth(token))
         assert response.status_code == 200
         assert response.json()["email"] == "alice@example.com"
+
+
+class TestGoogleSignIn:
+    """The authorization-code callback, mocked at the Google HTTP boundary.
+
+    The case that matters is the first one: Google issues a refresh token only on
+    the first consent, and treating its absence as an error sent every returning
+    user through a second authorization leg, which is a second account picker.
+    See docs/fixes/fix_plan_repeat-signin-shows-account-picker-twice.md.
+    """
+
+    SCOPES = "openid email profile https://www.googleapis.com/auth/calendar.freebusy"
+
+    @classmethod
+    def mock_google(cls, *, refresh_token: str | None, sub: str, email: str) -> None:
+        payload = {"access_token": "access-value", "expires_in": 3600, "scope": cls.SCOPES}
+        if refresh_token is not None:
+            payload["refresh_token"] = refresh_token
+        respx.post(TOKEN_ENDPOINT).mock(return_value=httpx.Response(200, json=payload))
+        respx.get(USERINFO_ENDPOINT).mock(
+            return_value=httpx.Response(200, json={"sub": sub, "email": email, "name": "Returning"})
+        )
+
+    @staticmethod
+    async def callback(client, state: str = "state-value"):
+        return await client.get(
+            "/auth/google/callback",
+            params={"code": "auth-code", "state": state},
+            headers={"Cookie": f"{STATE_COOKIE}={state}"},
+        )
+
+    @staticmethod
+    def sets_session_cookie(response) -> bool:
+        return any(h.startswith(f"{COOKIE_NAME}=") for h in response.headers.get_list("set-cookie"))
+
+    @pytest.fixture
+    async def returning(self, session):
+        """A user who has consented before and then signed out.
+
+        Signing out deletes the AuthSession row and nothing else, so the grant is
+        exactly as the previous sign-in left it.
+        """
+        user = User(
+            google_sub="returning-sub",
+            email="returning@example.com",
+            timezone="UTC",
+            day_start_time=time(0, 0),
+            day_duration_minutes=24 * 60,
+            capacity_ratio=0.5,
+        )
+        session.add(user)
+        await session.flush()
+        session.add(
+            OAuthToken(
+                user_id=user.id,
+                refresh_token_encrypted=encrypt("stored-refresh-value"),
+                scopes=self.SCOPES,
+                status="active",
+            )
+        )
+        await session.commit()
+        return user
+
+    async def stored_token(self, session, user) -> OAuthToken:
+        """Re-read from the database rather than from this session's identity map.
+
+        The callback commits through a different session, so a plain query would
+        hand back the copy loaded before the request. populate_existing refreshes
+        it in place; expire_all would instead strand `user` mid-query.
+        """
+        return await session.scalar(
+            select(OAuthToken)
+            .where(OAuthToken.user_id == user.id)
+            .execution_options(populate_existing=True)
+        )
+
+    @respx.mock
+    async def test_a_repeat_signin_completes_in_one_leg(self, client, session, returning):
+        """The regression test. Google returns no refresh token, which is normal for
+        an already-consented account, and the stored one carries the sign-in."""
+        before = (await self.stored_token(session, returning)).refresh_token_encrypted
+        self.mock_google(refresh_token=None, sub="returning-sub", email="returning@example.com")
+
+        response = await self.callback(client)
+
+        assert response.status_code == 307
+        assert response.headers["location"] == get_settings().frontend_origin, (
+            "a second authorization leg here is the second account picker the user sees"
+        )
+        assert self.sets_session_cookie(response)
+        assert (await self.stored_token(session, returning)).refresh_token_encrypted == before, (
+            "the stored grant is reused, not rotated"
+        )
+
+    @respx.mock
+    async def test_a_repeat_signin_does_not_claim_the_calendar_was_connected(
+        self, client, session, returning
+    ):
+        self.mock_google(refresh_token=None, sub="returning-sub", email="returning@example.com")
+
+        await self.callback(client)
+
+        names = set((await session.scalars(select(Event.name))).all())
+        assert "user_signed_in" in names
+        assert "calendar_connected" not in names, "nothing was connected; the grant already existed"
+
+    @respx.mock
+    async def test_a_revoked_grant_still_asks_for_consent(self, client, session, returning):
+        """The forced-consent redirect is the only route back from a revoked grant,
+        so narrowing it must not close it."""
+        await session.execute(
+            update(OAuthToken).where(OAuthToken.user_id == returning.id).values(status="revoked")
+        )
+        await session.commit()
+        self.mock_google(refresh_token=None, sub="returning-sub", email="returning@example.com")
+
+        response = await self.callback(client)
+
+        assert response.status_code == 307
+        location = response.headers["location"]
+        assert location.startswith("/auth/google/login?")
+        assert "force_consent=true" in location
+        assert "login_hint=returning%40example.com" in location, "skip the picker on the way back"
+
+    @respx.mock
+    async def test_a_placeholder_grant_still_asks_for_consent(self, client, session, returning):
+        """The row is created with b"" before the conditional write, so its presence
+        is not evidence of a usable grant."""
+        await session.execute(
+            update(OAuthToken)
+            .where(OAuthToken.user_id == returning.id)
+            .values(refresh_token_encrypted=b"")
+        )
+        await session.commit()
+        self.mock_google(refresh_token=None, sub="returning-sub", email="returning@example.com")
+
+        response = await self.callback(client)
+
+        assert response.status_code == 307
+        assert "force_consent=true" in response.headers["location"]
+
+    @respx.mock
+    async def test_a_first_signin_creates_the_user_and_the_grant(self, client, session):
+        self.mock_google(
+            refresh_token="fresh-refresh-value", sub="new-sub", email="new@example.com"
+        )
+
+        response = await self.callback(client)
+
+        assert response.status_code == 307
+        assert response.headers["location"] == get_settings().frontend_origin
+        assert self.sets_session_cookie(response)
+
+        user = await session.scalar(select(User).where(User.google_sub == "new-sub"))
+        assert user is not None
+        token = await self.stored_token(session, user)
+        assert decrypt(token.refresh_token_encrypted) == "fresh-refresh-value"
+
+        names = set((await session.scalars(select(Event.name))).all())
+        assert {"user_signed_in", "calendar_connected"} <= names
+
+    @respx.mock
+    async def test_the_forced_leg_fails_rather_than_redirecting_again(self, client):
+        """Without this, a prompt=consent leg that also returns no refresh token
+        redirects to itself until the browser gives up."""
+        self.mock_google(refresh_token=None, sub="new-sub", email="new@example.com")
+
+        response = await self.callback(client, state="c:state-value")
+
+        assert response.status_code == 502
 
 
 class TestCrossUserIsolation:
