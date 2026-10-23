@@ -1,7 +1,7 @@
 ---
 type: roadmap
 created: 2026-10-20
-updated: 2026-10-23
+updated: 2026-10-24
 ---
 
 # Roadmap
@@ -51,6 +51,7 @@ reporting, push-based calendar sync, and any background worker or Redis.
 - [x] daily-task-planner: Daily commitment planner with 4-task cap, 75% success rule, user-defined logical day, and read-only Google Calendar capacity input (plan: v1, status: in_progress)
 - [ ] provisional-day-signal: Live on-track or behind state for the day in progress in the history heatmap, additive to the persisted verdict (plan: v1, status: draft)
 - [x] timeline-window-drag: Drag and resize the dashed preference block window directly on the day timeline, snapping to wall-clock half hours and to block edges, magnetically kept clear of existing blocks (plan: v1, status: approved)
+- [x] interface-overhaul: Restructure the web interface into Today, History and Settings behind a persistent navbar, rebuilt on an explicit design token layer, adding task start, day detail and history statistics (plan: v1, status: approved)
 
 timeline-window-drag is ticked as of 2026-10-23: both manual gates pass, the
 changelog carries an entry, and the plan reads `approved`. It is **not** `shipped`,
@@ -65,6 +66,62 @@ Plan status stays `in_progress` rather than `shipped`: release-mode sets `shippe
 at ship time, and nothing has shipped, because deployment is deliberately out of
 v1 scope. The implementation is complete.
 
+interface-overhaul is ticked as of 2026-10-23. All four delivery phases are
+implemented and green: `pnpm lint` clean, 316 frontend tests across 13 files
+(up from 158 across 6), 214 backend tests (up from 208), and a production build
+that succeeds. The plan reads `approved`, ADR 0003 is accepted, plan §12 carries
+27 acceptance criteria and 44 test definitions, and `docs/features/interface-overhaul_doc.md`
+describes the result.
+
+It is **not** `shipped`, for the same reason timeline-window-drag is not:
+nothing is deployed anywhere, ADR 0001 defers hosting to v2, and release-mode
+sets `shipped` at ship time. No release checklist has been written for it.
+
+**Gates.** Flows 18 and 19 were run manually and reported passing by the user.
+Flows 20 to 22 were exercised directly in the running application at desktop and
+mobile widths, which found three defects that the automated suite could not: the
+anchor date rendered as the raw string `2026-10-23` in the recessed label style,
+a running task reading `0m in`, and an in-progress tint too quiet to answer
+"which one am I on". Four steps across Flows 20 and 21 are covered by automated
+test but were not exercised live, at the user's decision: the four-primary
+remedy, the at-risk dot, completing a started task, and drag reordering. The
+assistant path (Flow 21.6 to 21.8) was deliberately not run, because it bills the
+real model. Most of Flow 22 cannot be run by anyone yet: no day has ever been
+scored, so the streak, the rolling rate and a populated day detail have no data
+to show.
+
+**Two defects were closed that nothing had reported**, both invisible to the
+previous suite because no test asserted a colour. Dark mode defined four of
+seven colour roles, leaving `success`, `failure` and `risk` at values chosen for
+light paper. And the palette failed WCAG AA in *both* schemes: `muted` sat at
+3.11:1 on light paper while being the most frequent class in the application,
+and `risk` at 2.79:1, below even the 3:1 graphic threshold.
+
+**Four more were found by `doc-crawler` after every phase gate had passed**, and
+each now has a regression test. The rolling 7-day figure counted the grid's
+forward padding, so it held one real day on a Sunday and seven only on a
+Saturday. `formatAnchorDate` rendered `/history/2026-13-45` as a confident
+"Sunday, February 14", because `Number("")` is 0 rather than NaN and `new Date`
+rolls out-of-range parts over. Today rendered a loading state forever on any
+failure that was not a 409. And History and Settings had no loading or error
+state at all, while a test named "every screen has a designed loading, empty and
+error state" asserted only Today's. That last one is the clearest case in this
+change set of a test title outrunning its coverage.
+
+**One scope reversal, recorded rather than absorbed.** `package.json` gained
+three development dependencies (`jsdom`, `@testing-library/react`,
+`@testing-library/user-event`). The runtime manifest is byte-identical. This
+document cites "`package.json` is unchanged" as a success twice above, in
+narration about `timeline-window-drag`, where it was true; from 2026-10-23 only
+the runtime half of that claim holds, and future documents should say so. ADR
+0002's deferral of a DOM test harness is withdrawn on the condition ADR 0002 set
+for itself. ADR 0002 is not superseded.
+
+**The load-bearing premise is still unverified.** This work built before
+measuring, justified on the user's statement that the interface suppressed the
+daily use that validation depends on. Nothing here tests that. It is cheap to
+check once days accumulate, because the north star is already instrumented.
+
 ## Fixes
 
 - [x] stale-block-snapshot: Preference block edits did not reach the day in progress, so the "set up a work block" nudge survived the user acting on it (fix: high, status: verified)
@@ -73,9 +130,22 @@ v1 scope. The implementation is complete.
 - [x] signout-leaves-page-frozen: queryClient.clear() orphaned the mounted observers on stale success, so signing out left the dashboard on screen until a manual reload (fix: high, status: verified)
 - [x] time-inputs-show-12-hour-clock: The three Settings time fields rendered a 12-hour clock with AM/PM, because `<input type="time">` takes its format from the browser locale and cannot be constrained; replaced with a custom 24-hour ClockInput (fix: low, status: verified)
 - [x] pnpm-store-committed-to-history: The compose web service wrote pnpm's package store onto the host bind mount and nothing ignored it, so 122 MB and 7,863 files entered git history, 98.1% of the repository by size (fix: medium, status: verified)
+- [x] block-edits-leave-stale-ui: A preference block edit left the Settings list and the day timeline showing a day shape that no longer existed, and a failed delete looked identical to one that succeeded (fix: high, status: verified)
+- [ ] repeat-signin-shows-account-picker-twice: Treating a missing refresh token as fatal sent every returning user through a second authorization leg, so signing in after signing out rendered the Google account picker twice (fix: medium, status: applied)
 
-All six fixes are verified. Flow 17, the manual gate on the clock field, was run
-and reported passing on 2026-10-23, alongside Flow 16 for the timeline drag.
+Seven of the eight fixes are verified. Flow 17, the manual gate on the clock
+field, was run and reported passing on 2026-10-23, alongside Flow 16 for the
+timeline drag.
+
+`repeat-signin-shows-account-picker-twice` is `applied` rather than `verified`,
+and the unticked box is deliberate. The code change is complete: 220 backend
+tests pass, six of them new and the first automated coverage of
+`/auth/google/login` and `/auth/google/callback` in the project, and four of the
+six fail against the original source. But nothing automated can prove that
+Google renders the account picker once, because that is Google's behaviour in a
+real browser. The remaining gate is a live sign-out and sign-in by the user.
+`block-edits-leave-stale-ui` was registered in this same pass, having been
+applied and verified on 2026-10-24 before the roadmap was next written.
 
 ## Business Objective Coverage
 
@@ -88,6 +158,17 @@ and reported passing on 2026-10-23, alongside Flow 16 for the timeline drag.
   commitment-shrinking by three anti-gaming guardrails. Review fires after **30
   scored days**, a usage threshold rather than a calendar date. `review_due` stays
   null until release-mode sets it.
+- interface-overhaul: **Serves the objective indirectly, and is not separately
+  measured.** Implemented 2026-10-23. It removes interface friction as a
+  competing explanation for low usage. It carries no tracking plan and adds no
+  events, by its own W4, so whether it worked will show up in the existing
+  north star rather than in a figure of its own. One of its requirements does
+  feed the existing plan: M7 wired `POST /tasks/{id}/start`, which is the only
+  way `actual_minutes` is ever populated. Every pending task row now carries a
+  start control, so the estimation-error indicator no longer measures a subset
+  that is empty by construction. That **narrows, and does not close**, the first
+  of the three Drift Notes under Next Up item 3: starting remains optional, so
+  the subset can still be thin.
 
 ## Unplanned Work
 
@@ -149,6 +230,19 @@ Checked on 2026-10-21 rather than asserted:
 - The runtime container builds and serves both the SPA and the API.
 
 ## Next Up
+
+**One item is active and waiting on the user.** The fix for the double account
+picker is applied and documented, and needs a live sign-out and sign-in to move
+to `verified`. See item 20. Everything else below is the standing backlog.
+
+**interface-overhaul is complete and documented.**
+
+The chain ran end to end on 2026-10-23: interview-mode, roadmap-mode,
+architecture-mode (ADR 0003), qa-mode, four implementation phases each gated on
+lint, tests and build, then documentation-mode and this pass. What remains for
+this feature is listed as items 16 to 19 below.
+
+The numbered list below is the standing backlog and is unchanged.
 
 1. **Use it.** Nothing further is needed to start recording days. The validation
    question is behavioral and cannot be answered by more building.
@@ -309,3 +403,38 @@ Checked on 2026-10-21 rather than asserted:
    five questions in tracking plan §6 in order, and write the verdict back.
 15. **release-mode** only if and when deployment is wanted. That is a v2 decision,
    and ADR 0001 names Cloud Run plus managed Postgres as the indicated path.
+16. **The interface overhaul has no release checklist and no changelog entry.**
+   `docs/releases/CHANGELOG.md` has no `[Unreleased]` line for it, and its
+   section 28 still describes the surfaces M5 shipped: "Minimal dashboard,
+   collapsible chat". There is no dashboard and the chat is not collapsible.
+   release-mode owns both. This now compounds the gap already recorded at item 8.
+17. **Four manual steps are covered by test but were never run live**, by the
+   user's decision on 2026-10-23: the four-primary remedy, the at-risk dot,
+   completing a started task, and drag reordering. The assistant path was
+   deliberately skipped because it bills the real model. Most of Flow 22 is
+   unrunnable until days have actually been scored.
+18. **The heatmap has no month or weekday labels.** Twenty-six columns of
+   squares with no axis is hard to read as a record, and the user named the
+   heatmap a motivator and an analytics window. Found while verifying P3,
+   deliberately not built because it is outside plan v1's scope. Needs a
+   decision, and interview-mode if the answer is yes.
+19. **Four Drift Notes stand in `docs/features/interface-overhaul_doc.md`**:
+   `vite.config.ts` is outside `tsconfig.json`'s `include` so its new `test`
+   block is not type-checked; `WEEKS = 26` is declared in two files that must
+   agree; the heatmap axis gap at item 18; and `lib/elapsed.ts` has no direct
+   test, so its timestamp normalisation is covered only incidentally.
+20. **Verify the sign-in fix live.** Sign out, sign back in with a real Google
+   account, and confirm one account picker, no consent screen, and a landing
+   straight on the app. That is the only outstanding condition in
+   `docs/fixes/fix_plan_repeat-signin-shows-account-picker-twice.md`, and no test
+   can stand in for it. Two things to know while checking: the fix stops the
+   refresh token rotating on every sign-in, which also stops it consuming Google's
+   per-account token limit; and it changes when revocation is noticed, from
+   sign-in to the next calendar read, so a grant revoked at Google now shows the
+   degraded calendar state first and re-consents on the following sign-in.
+21. **The `calendar_connected` series is not comparable across 2026-10-24.**
+   Until the sign-in fix, the event fired on every repeat sign-in rather than only
+   when a grant was established, so historical counts are inflated by an unknown
+   amount. Recorded as Drift Note 6 in `docs/doer/DOCUMENTATION.md`. metrics-mode
+   should decide whether the pre-fix window is discarded or annotated before the
+   post-launch review reads it.
