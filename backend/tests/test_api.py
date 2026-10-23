@@ -717,3 +717,103 @@ class TestStoredTimestamps:
         response = await client.get(f"/days/{day.anchor_date.isoformat()}", headers=auth(token))
         assert response.status_code == 200
         assert response.json()["anchor_date"] == day.anchor_date.isoformat()
+
+
+class TestTasksByAnchor:
+    """T-IO-26 to T-IO-30. `GET /tasks` gained an optional `anchor`, so the
+    History screen can show which tasks a past day actually held.
+
+    The parameter is additive and the no-parameter behaviour is unchanged,
+    which is the property the two pre-existing `GET /tasks` tests already
+    assert and which AC-IO-18 names explicitly.
+    """
+
+    async def test_without_an_anchor_it_still_returns_the_day_in_progress(
+        self, client, session, alice
+    ):
+        """T-IO-26."""
+        from doer.services import day_service
+
+        user, token = alice
+        await client.post("/tasks", headers=auth(token), json={"title": "today's work"})
+
+        response = await client.get("/tasks", headers=auth(token))
+        assert response.status_code == 200
+        body = response.json()
+        assert [t["title"] for t in body] == ["today's work"]
+
+        day = await day_service.current_day(session, user)
+        assert body[0]["anchor_date"] == day.anchor_date.isoformat()
+
+    async def test_an_anchor_returns_that_day_s_tasks(self, client, session, alice):
+        """T-IO-27. Addressed by anchor rather than by being the open day."""
+        from doer.services import day_service
+
+        user, token = alice
+        await client.post("/tasks", headers=auth(token), json={"title": "named day"})
+        day = await day_service.current_day(session, user)
+
+        response = await client.get(
+            "/tasks", headers=auth(token), params={"anchor": day.anchor_date.isoformat()}
+        )
+        assert response.status_code == 200
+        assert [t["title"] for t in response.json()] == ["named day"]
+
+    async def test_an_anchor_with_no_logical_day_is_a_404(self, client, alice):
+        """T-IO-28. Matching GET /days/{anchor} rather than inventing an empty
+        day, so the interface can tell "nothing scheduled" from "no tasks"."""
+        _, token = alice
+        response = await client.get(
+            "/tasks", headers=auth(token), params={"anchor": "2020-01-01"}
+        )
+        assert response.status_code == 404
+
+    async def test_reading_history_writes_nothing(self, client, session, alice):
+        """T-IO-29. The guarantee that made this a query parameter rather than
+        a reuse of `_resolve_day`: that path calls `open_day`, which
+        materializes a row and emits two analytics events. Reading the past
+        must not create days the user never had, nor write to an append-only
+        event log.
+        """
+        from sqlalchemy import func
+
+        from doer.models import Event, LogicalDay
+
+        _, token = alice
+        # Open today first, so the counts below are not measuring that.
+        await client.get("/tasks", headers=auth(token))
+
+        days_before = await session.scalar(select(func.count()).select_from(LogicalDay))
+        events_before = await session.scalar(select(func.count()).select_from(Event))
+
+        response = await client.get(
+            "/tasks", headers=auth(token), params={"anchor": "2019-07-04"}
+        )
+        assert response.status_code == 404
+
+        assert await session.scalar(select(func.count()).select_from(LogicalDay)) == days_before
+        assert await session.scalar(select(func.count()).select_from(Event)) == events_before
+
+    async def test_a_malformed_anchor_is_rejected_cleanly(self, client, alice):
+        """T-IO-30. 422 from validation, never a 500."""
+        _, token = alice
+        for bad in ("banana", "2026-13-45", "23-10-2026"):
+            response = await client.get("/tasks", headers=auth(token), params={"anchor": bad})
+            assert response.status_code == 422, bad
+
+    async def test_an_anchor_cannot_reach_another_user_s_day(self, client, session, alice, bob):
+        """Anchor dates are guessable, so the lookup stays scoped to the caller."""
+        from doer.services import day_service
+
+        alice_user, alice_token = alice
+        _, bob_token = bob
+        await client.post("/tasks", headers=auth(alice_token), json={"title": "alice only"})
+        day = await day_service.current_day(session, alice_user)
+
+        response = await client.get(
+            "/tasks", headers=auth(bob_token), params={"anchor": day.anchor_date.isoformat()}
+        )
+        # Bob has no day on that anchor, so there is nothing to show him.
+        assert response.status_code in (200, 404)
+        if response.status_code == 200:
+            assert [t["title"] for t in response.json()] == []

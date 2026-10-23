@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -88,10 +89,35 @@ async def _load(session: AsyncSession, user: User, task_id: uuid.UUID) -> tuple[
 
 
 @router.get("")
-async def list_today(
-    user: User = Depends(current_user), session: AsyncSession = Depends(get_session)
+async def list_tasks(
+    anchor: date | None = Query(
+        default=None,
+        description="A past anchor date. Omit for the day in progress.",
+    ),
+    user: User = Depends(current_user),
+    session: AsyncSession = Depends(get_session),
 ) -> list[TaskOut]:
-    day = await _resolve_day(session, user)
+    """The tasks of a logical day: the one in progress, or a named past one.
+
+    The two cases are deliberately not the same call. `_resolve_day` closes
+    every elapsed day, materializes the current one through `open_day`, and
+    syncs the calendar when stale. All three are correct for "now" and all
+    three are wrong for a date in the past: materializing would invent a day
+    the user never had, and `open_day` emits two analytics events while doing
+    it, so reading history would write to the event log.
+
+    An anchor that names no logical day is a 404, matching `GET /days/{anchor}`
+    rather than inventing an empty day. See AC-IO-19.
+    """
+    if anchor is None:
+        day = await _resolve_day(session, user)
+    else:
+        found = await day_service.get_day(session, user, anchor)
+        if found is None:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, "no logical day for that anchor date"
+            )
+        day = found
     return [serialize(t, day) for t in await task_service.tasks_for_day(session, day)]
 
 
