@@ -50,13 +50,16 @@ reporting, push-based calendar sync, and any background worker or Redis.
 
 - [x] daily-task-planner: Daily commitment planner with 4-task cap, 75% success rule, user-defined logical day, and read-only Google Calendar capacity input (plan: v1, status: in_progress)
 - [ ] provisional-day-signal: Live on-track or behind state for the day in progress in the history heatmap, additive to the persisted verdict (plan: v1, status: draft)
-- [ ] timeline-window-drag: Drag and resize the dashed preference block window directly on the day timeline, snapping to wall-clock half hours and to block edges, magnetically kept clear of existing blocks (plan: v1, status: draft)
+- [x] timeline-window-drag: Drag and resize the dashed preference block window directly on the day timeline, snapping to wall-clock half hours and to block edges, magnetically kept clear of existing blocks (plan: v1, status: approved)
 
-The timeline-window-drag box is unticked on purpose, and no longer because of
-testing: both gates pass as of 2026-10-23. Two conditions of the definition of
-done are still unmet. Its plan reads `status: draft`, which only release-mode or
-fix-mode may change, and `docs/releases/CHANGELOG.md` has no entry for it. See
-Next Up item 5.
+timeline-window-drag is ticked as of 2026-10-23: both manual gates pass, the
+changelog carries an entry, and the plan reads `approved`. It is **not** `shipped`,
+and the distinction is real rather than bookkeeping. Nothing is deployed anywhere;
+ADR 0001 defers hosting to v2, so the application runs on one machine. The release
+checklist (`docs/releases/timeline-window-drag_release_checklist.md`) sits at
+`ready` for the same reason, and names the one readiness gap: no tracking plan
+exists for this feature, so nothing measures whether direct manipulation actually
+made block setup faster. metrics-mode owns that.
 
 Plan status stays `in_progress` rather than `shipped`: release-mode sets `shipped`
 at ship time, and nothing has shipped, because deployment is deliberately out of
@@ -158,7 +161,7 @@ Checked on 2026-10-21 rather than asserted:
 4. **provisional-day-signal, plan v1 is draft.** Architecture-mode next: the two
    open questions that decide the shape are how "substantially elapsed" is defined
    and whether `scheduled_primary` becomes live-when-open in the same change.
-5. **timeline-window-drag is built; the manual gate has not been run.** ADR 0002
+5. **timeline-window-drag is built, verified and in the changelog.** ADR 0002
    (accepted 2026-10-22) settles grid-plus-flush snapping, an unclipped overlay
    layer for the handles, pure geometry in `daytime.ts` with a humble component,
    and no DOM test harness. The survey behind it found plan v1's M1, M2 and M6
@@ -179,9 +182,18 @@ Checked on 2026-10-21 rather than asserted:
    without automated coverage, so the feature is now verified end to end. All 28
    steps, including the phase-shifted day at 14:15.
 
-   **Still open before this counts as done**, both outside roadmap-mode's
-   authority to change: the plan's frontmatter reads `status: draft`, and
-   `docs/releases/CHANGELOG.md` has no entry. Neither is a quality question now.
+   **Shipped as far as this project ships.** Commit `ecfcfc9`. release-mode ran on
+   2026-10-23: the changelog carries Added, Changed and Fixed entries under
+   `[Unreleased]`, the release checklist is written at `ready`, and the plan is
+   `approved` at the user's instruction. `shipped` is deliberately not set, because
+   there is no deployment for it to describe.
+
+   **One gap remains, and it is a measurement gap rather than a quality one.**
+   No tracking plan exists for this feature, so no event fires when anyone drags,
+   resizes, or types a block time. The 31-event inventory is unchanged. The stated
+   reason for building direct manipulation was that typing two clock strings is
+   slow and error-prone, and nothing currently tests whether that is now false.
+   metrics-mode owns it.
 
    **Two additions beyond the plan, both deliberate.**
    `frontend/src/__tests__/day_timeline.test.tsx` renders the component with
@@ -200,7 +212,7 @@ Checked on 2026-10-21 rather than asserted:
    strongly than rewriting them would. ADR 0002 carries a dated withdrawal of the
    clause rather than a deletion, so the decision as accepted stays legible.
 
-6. **time-inputs-show-12-hour-clock is applied; its manual gate is unrun.** The
+6. **time-inputs-show-12-hour-clock is verified.** The
    three Settings time fields rendered a 12-hour clock because
    `<input type="time">` takes its format from the browser's locale. Verified
    against engine source rather than assumed: Firefox never reads the `lang`
@@ -253,25 +265,32 @@ Checked on 2026-10-21 rather than asserted:
 8. **Documents doc-crawler flagged that are still wrong**, each owned by a mode
    that has not run. The `docs/user_testing_documentation.md` migration wording is
    fixed as of 2026-10-22, verified against `docker-compose.yml:28`. Still open:
-   `docs/releases/CHANGELOG.md` has no
-   `[Unreleased]` entries for the three 2026-10-21 fixes or the heatmap endpoint
-   change (release-mode); and `.env.example` line 4 disagrees with
+   `docs/releases/CHANGELOG.md` has no `[Unreleased]` entries for the three
+   2026-10-21 fixes or the heatmap endpoint change, which the 2026-10-23
+   release-mode pass did not cover because it was scoped to the two newest changes
+   (release-mode); and `.env.example` line 4 disagrees with
    `docs/setup/gcp_setup.md` line 130 about the database host, which sends a
    reader following one of them to a connection failure and the other to
    production.
-9. **Sign-out is unplanned and unmeasured.** Plan v1 §4 lists no requirement for
+9. **Tracking plan wanted for timeline-window-drag.** The feature is built,
+   verified and in the changelog, and no event measures it. Block definition is on
+   the critical path to the capacity model working at all, and the case for direct
+   manipulation was that typing two clock strings is slow and error-prone. That
+   claim is currently untested. metrics-mode owns it; named in the release
+   checklist as the single unmet readiness item.
+10. **Sign-out is unplanned and unmeasured.** Plan v1 §4 lists no requirement for
    session termination and AC-01 to AC-21 contain no criterion for it, so the
    control fills an unenumerated gap rather than satisfying a commitment. It also
    emits no event, where sign-in emits `user_signed_in`, so the tracking plan's
    31-event inventory is unchanged while a new user-facing transition exists.
    Worth a decision in metrics-mode rather than a silent asymmetry.
-10. **Fix plan wanted for the Docker build context.** No `.dockerignore` exists, so
+11. **Fix plan wanted for the Docker build context.** No `.dockerignore` exists, so
    the context carries roughly 264 MB of ignored-but-copied artifacts, and
    `Dockerfile:27` copies the host's darwin-arm64 `node_modules` over the linux
    install from line 26. The size half is cosmetic; the overlay half is a
    correctness question that no build has been run to settle. Declined as
    out-of-scope in `docs/fixes/fix_plan_pnpm-store-committed-to-history.md`.
-11. **`README.md` does not reach the fix plans or the newer ADR, and no mode owns
+12. **`README.md` does not reach the fix plans or the newer ADR, and no mode owns
    it.** Its "Where the thinking is written down" table lists six documents and
    omits `docs/fixes/` entirely, so none of the five fix plans is discoverable
    from the entry point, and the 2026-10-21 history rewrite is recorded nowhere a
@@ -282,11 +301,11 @@ Checked on 2026-10-21 rather than asserted:
    alone never runs the 158 frontend tests. The re-clone guidance now lives in
    `docs/doer/DOCUMENTATION.md`. `README.md` appears in no row of CLAUDE.md's
    file ownership table, so this needs either a user decision or a new owner.
-12. **Fix plan wanted for the busy-subtraction wipe.** Nine of the eleven
+13. **Fix plan wanted for the busy-subtraction wipe.** Nine of the eleven
    `recompute_capacity` call sites pass no `busy`, inflating a calendar-connected
    user's threshold after any task write. Found during the stale-block-snapshot
    analysis and deliberately left out of that fix's scope.
-13. **Post-launch review** after 30 scored days: re-enter metrics-mode, answer the
+14. **Post-launch review** after 30 scored days: re-enter metrics-mode, answer the
    five questions in tracking plan §6 in order, and write the verdict back.
-14. **release-mode** only if and when deployment is wanted. That is a v2 decision,
+15. **release-mode** only if and when deployment is wanted. That is a v2 decision,
    and ADR 0001 names Cloud Run plus managed Postgres as the indicated path.

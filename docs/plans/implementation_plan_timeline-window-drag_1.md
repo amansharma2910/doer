@@ -2,7 +2,7 @@
 type: implementation_plan
 feature: timeline-window-drag
 version: 1
-status: draft
+status: approved
 unplanned: false
 linear_issue: null
 created: 2026-10-21
