@@ -2,11 +2,13 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, ApiError } from "../lib/api";
+import { ClockInput } from "../components/ClockInput";
 import { DayTimeline } from "../components/DayTimeline";
 import {
   clampEndToDay,
   dayEndClock,
   endForStart,
+  isClock,
   findOverlap,
   firstFreeGap,
   formatDuration,
@@ -67,11 +69,10 @@ function DayShapeForm({ user }: { user: User }) {
 
       <div className="mt-4 flex flex-wrap items-end gap-6 text-sm">
         <Field label="Starts">
-          <input
-            type="time"
+          <ClockInput
+            label="Day start"
             value={startTime}
-            onChange={(e) => setStartTime(e.target.value)}
-            className="bg-transparent outline-none"
+            onChange={setStartTime}
           />
         </Field>
         <Field label="Runs for">
@@ -198,6 +199,19 @@ function BlocksEditor({ user }: { user: User }) {
             ? { start: range.start, end: range.end, isFocus: FOCUS_KINDS.includes(kind), invalid: collision !== null }
             : null
         }
+        // Claim the form before the first move, so a refetch landing mid-gesture
+        // cannot hand the window back to the suggestion logic.
+        onGestureStart={() => {
+          edited.current = true;
+        }}
+        onPreviewChange={(start, end) => {
+          // Also claimed here, not only in onGestureStart, so the invariant is
+          // local to the write rather than spread across two callbacks that a
+          // future caller could pair incorrectly.
+          edited.current = true;
+          setFrom(offsetToClock(start, dayStart));
+          setTo(offsetToClock(end, dayStart));
+        }}
       />
 
       <ul className="mt-5 space-y-1 text-sm">
@@ -256,19 +270,19 @@ function BlocksEditor({ user }: { user: User }) {
 
           <label className="flex flex-col gap-1">
             <span className="text-xs text-[var(--color-muted)]">From</span>
-            <input
-              type="time"
+            <ClockInput
+              label="Block start"
               value={from}
-              onChange={(e) => {
+              minuteStep={30}
+              onChange={(next) => {
                 edited.current = true;
-                const next = e.target.value;
                 setFrom(next);
                 // Carry the end along rather than leaving a dead end the app
                 // already knows how to resolve.
                 const adjusted = endForStart(next, to, dayStart, user.day_duration_minutes);
                 if (adjusted) setTo(adjusted);
               }}
-              className="border-b border-[var(--color-line)] bg-transparent pb-1 tabular-nums outline-none"
+              className="border-b border-[var(--color-line)] pb-1"
             />
           </label>
 
@@ -279,20 +293,24 @@ function BlocksEditor({ user }: { user: User }) {
                 (to {dayEndClock(dayStart, user.day_duration_minutes)} at the latest)
               </span>
             </span>
-            <input
-              type="time"
+            <ClockInput
+              label="Block end"
               value={to}
-              onChange={(e) => {
+              minuteStep={30}
+              onChange={(next) => {
                 edited.current = true;
-                setTo(e.target.value);
+                setTo(next);
               }}
-              onBlur={() => {
-                // Cap at the end of the day once the edit is finished, rather
-                // than mid-keystroke while AM/PM is still being chosen.
-                const capped = clampEndToDay(from, to, dayStart, user.day_duration_minutes);
+              onCommit={(settled) => {
+                // Cap at the end of the day once the edit is finished rather than
+                // mid-keystroke: typing 1 on the way to 14 momentarily reads
+                // 01:00, which the cap would otherwise rewrite to the day's end.
+                // Clamped against the settled value rather than `to`, which a
+                // digit resolving in this same event has not yet updated.
+                const capped = clampEndToDay(from, settled, dayStart, user.day_duration_minutes);
                 if (capped) setTo(capped);
               }}
-              className="border-b border-[var(--color-line)] bg-transparent pb-1 tabular-nums outline-none"
+              className="border-b border-[var(--color-line)] pb-1"
             />
           </label>
 
@@ -333,6 +351,10 @@ function BlocksEditor({ user }: { user: User }) {
               of your day. Anything up to {range.error.dayEndsAt} works, including
               after midnight.
             </span>
+          ) : "error" in range && range.error.kind === "unreadable" ? (
+            <span className="text-[var(--color-risk)]">
+              Finish typing both times before adding the block.
+            </span>
           ) : (
             <span className="text-[var(--color-risk)]">Pick an end time after the start.</span>
           )}
@@ -365,6 +387,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 function computeEnd(startTime: string, hours: number): string {
+  if (!isClock(startTime)) return "an unreadable time";
   const [h, m] = startTime.split(":").map(Number);
   const total = h * 60 + m + Math.round(hours * 60);
   const hh = Math.floor(total / 60) % 24;

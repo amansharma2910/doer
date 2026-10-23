@@ -110,7 +110,8 @@ edit share is how prompt drift first appears.
 | Triggers | `backend/alembic/versions/*_initial_schema.py`, `*_tasks.py` |
 | Heatmap rendering rules | `frontend/src/components/Heatmap.tsx` |
 | Heatmap grid dates | `backend/doer/daytime.py` (`local_date`, `grid_days`) |
-| Drag reorder | `frontend/src/components/TaskList.tsx` |
+| Drag reorder (tasks, dnd-kit) | `frontend/src/components/TaskList.tsx` |
+| Drag and resize (settings timeline, native pointer) | `frontend/src/components/DayTimeline.tsx`, `frontend/src/lib/daytime.ts`, and `docs/features/timeline-window-drag_doc.md` |
 
 ## 4. Interfaces and Contracts
 

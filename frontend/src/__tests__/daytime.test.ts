@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  candidatePositions,
   clampEndToDay,
+  isClock,
   clockToOffset,
   dayEndClock,
   endForStart,
@@ -8,6 +10,13 @@ import {
   firstFreeGap,
   formatDuration,
   offsetToClock,
+  resizeWindow,
+  slideWindow,
+  snapMinute,
+  stepClock,
+  stepToMultiple,
+  stepEdge,
+  stepWindow,
   toOffsets,
 } from "../lib/daytime";
 
@@ -280,5 +289,349 @@ describe("after midnight is inside a late-night day", () => {
   it("rejects only what genuinely falls past the end", () => {
     const result = toOffsets("03:00", "06:00", DAY_START, DURATION);
     expect("error" in result && result.error.kind).toBe("past_day_end");
+  });
+});
+
+// A day starting at 14:15 puts the wall-clock half hours at offsets 15, 45, 75,
+// which is the case most likely to be got wrong.
+const SHIFTED_START = "14:15";
+
+// One block, deliberately not on a half hour, because nothing obliges a stored
+// block to be. 100 to 160 is 15:40 to 16:40 on the canonical day.
+const OBSTACLE = [{ start_offset_minutes: 100, end_offset_minutes: 160 }];
+
+describe("positions a dragged edge may rest on", () => {
+  it("is every half hour when the day starts on one", () => {
+    const positions = candidatePositions(DAY_START, DURATION, []);
+    expect(positions).toHaveLength(31);
+    expect(positions[0]).toBe(0);
+    expect(positions.at(-1)).toBe(900);
+  });
+
+  it("phase-shifts the grid when the day does not start on a half hour", () => {
+    const positions = candidatePositions(SHIFTED_START, DURATION, []);
+    // 14:30 and 15:00 are reachable; 14:45 is not, and neither is offset 30.
+    expect(positions).toContain(15);
+    expect(positions).toContain(45);
+    expect(positions).not.toContain(30);
+  });
+
+  it("keeps the day's own ends reachable even when they are off the grid", () => {
+    const positions = candidatePositions(SHIFTED_START, DURATION, []);
+    expect(positions).toContain(0);
+    expect(positions).toContain(900);
+  });
+
+  it("adds a block's boundaries, which is what makes flush reachable", () => {
+    const positions = candidatePositions(DAY_START, DURATION, OBSTACLE);
+    expect(positions).toContain(100);
+    expect(positions).toContain(160);
+  });
+
+  it("does not double-count a boundary that already sits on the grid", () => {
+    const onGrid = [{ start_offset_minutes: 120, end_offset_minutes: 180 }];
+    expect(candidatePositions(DAY_START, DURATION, onGrid)).toHaveLength(31);
+  });
+
+  it("handles unordered input", () => {
+    const reversed = [
+      { start_offset_minutes: 300, end_offset_minutes: 360 },
+      { start_offset_minutes: 100, end_offset_minutes: 160 },
+    ];
+    expect(candidatePositions(DAY_START, DURATION, reversed)).toEqual(
+      candidatePositions(DAY_START, DURATION, [...reversed].reverse()),
+    );
+  });
+});
+
+describe("sliding the window", () => {
+  it("lands on a half hour in open time", () => {
+    expect(slideWindow(0, 60, 45, DAY_START, DURATION, [])).toEqual({ start: 60, end: 120 });
+  });
+
+  it("keeps its length, including a length that is not a multiple of 30", () => {
+    const moved = slideWindow(22, 38, 200, DAY_START, DURATION, []);
+    expect(moved.end - moved.start).toBe(38);
+  });
+
+  it("parks flush against a block that is not on a half hour", () => {
+    // Ends at exactly 100, where the block begins. No sliver left over.
+    expect(slideWindow(0, 60, 99, DAY_START, DURATION, OBSTACLE)).toEqual({
+      start: 40,
+      end: 100,
+    });
+  });
+
+  it("pops to the far side once past the midpoint of the two parked positions", () => {
+    // Parked positions are 40 and 160, so the crossover is at 100.
+    expect(slideWindow(0, 60, 101, DAY_START, DURATION, OBSTACLE).start).toBe(160);
+  });
+
+  it.each([
+    ["forward", 100, 160],
+    ["backward", -200, 40],
+  ])("breaks the midpoint tie in the direction of travel (%s)", (_label, delta, expected) => {
+    const from = delta > 0 ? 0 : 300;
+    expect(slideWindow(from, 60, delta, DAY_START, DURATION, OBSTACLE).start).toBe(expected);
+  });
+
+  it("never rests on a block's own start, though that is a candidate", () => {
+    // [100, 160] is a candidate start and overlaps the block for any length.
+    expect(slideWindow(0, 60, 100, DAY_START, DURATION, OBSTACLE).start).not.toBe(100);
+  });
+
+  it("composes an odd length with flush parking", () => {
+    // A 38 minute window parks at 62 so it ends exactly at 100. Crossover is 111.
+    expect(slideWindow(22, 38, 88, DAY_START, DURATION, OBSTACLE).start).toBe(62);
+    expect(slideWindow(22, 38, 90, DAY_START, DURATION, OBSTACLE).start).toBe(160);
+  });
+
+  it("skips a gap too short to hold it and stays parked", () => {
+    // The only free stretches are [0,100] and a 40 minute one at [160,200].
+    const crowded = [
+      { start_offset_minutes: 100, end_offset_minutes: 160 },
+      { start_offset_minutes: 200, end_offset_minutes: 900 },
+    ];
+    expect(slideWindow(0, 60, 900, DAY_START, DURATION, crowded).start).toBe(40);
+  });
+
+  it("still moves when the window fits nowhere, so the control is not dead", () => {
+    // Only reachable from typed input: a magnetic drag cannot create this.
+    const full = [{ start_offset_minutes: 0, end_offset_minutes: 900 }];
+    expect(slideWindow(0, 60, 300, DAY_START, DURATION, full).start).toBe(300);
+  });
+
+  it("stops at the end of the day", () => {
+    expect(slideWindow(840, 60, 500, DAY_START, DURATION, [])).toEqual({
+      start: 840,
+      end: 900,
+    });
+  });
+
+  it("stops at the start of the day", () => {
+    expect(slideWindow(0, 60, -500, DAY_START, DURATION, [])).toEqual({ start: 0, end: 60 });
+  });
+});
+
+describe("resizing the window", () => {
+  it("moves only the edge being dragged", () => {
+    expect(resizeWindow("end", 0, 60, 45, DAY_START, DURATION, [])).toEqual({
+      start: 0,
+      end: 120,
+    });
+    expect(resizeWindow("start", 300, 420, -45, DAY_START, DURATION, [])).toEqual({
+      start: 240,
+      end: 420,
+    });
+  });
+
+  it("stops flush at a block boundary that is not on a half hour", () => {
+    const odd = [{ start_offset_minutes: 100, end_offset_minutes: 155 }];
+    expect(resizeWindow("start", 155, 215, -100, DAY_START, DURATION, odd).start).toBe(155);
+  });
+
+  it("does not jump a block even when free space lies beyond it", () => {
+    // Bodies jump; edges do not. 160 onwards is free and must stay unreachable.
+    expect(resizeWindow("end", 0, 60, 500, DAY_START, DURATION, OBSTACLE).end).toBe(100);
+  });
+
+  it("stops at 30 minutes rather than collapsing or swapping", () => {
+    expect(resizeWindow("end", 0, 60, -100, DAY_START, DURATION, [])).toEqual({
+      start: 0,
+      end: 30,
+    });
+    expect(resizeWindow("end", 0, 30, -100, DAY_START, DURATION, [])).toEqual({
+      start: 0,
+      end: 30,
+    });
+    expect(resizeWindow("start", 0, 30, 100, DAY_START, DURATION, [])).toEqual({
+      start: 0,
+      end: 30,
+    });
+  });
+
+  it("reaches the very end of the day", () => {
+    expect(resizeWindow("end", 840, 870, 1000, DAY_START, DURATION, []).end).toBe(900);
+  });
+
+  it("puts the 30 minute floor above the day's own edge", () => {
+    // On a 14:15 day the first half hour is offset 15, so [0, 15] would be a
+    // 15 minute window. It must be unreachable; [0, 45] must not be.
+    expect(resizeWindow("end", 0, 45, -100, SHIFTED_START, DURATION, [])).toEqual({
+      start: 0,
+      end: 45,
+    });
+    expect(resizeWindow("end", 0, 75, -100, SHIFTED_START, DURATION, []).end).toBe(45);
+  });
+});
+
+describe("stepping with the arrow keys", () => {
+  it("always moves, even from a parked position", () => {
+    // The reason this is not slideWindow with a 30 minute delta: parked at 40,
+    // the nearest position to a small nudge is 40 itself, so the key would look
+    // broken. The step out of a parked position is the pop to the far side.
+    expect(stepWindow(40, 60, true, DAY_START, DURATION, OBSTACLE).start).toBe(160);
+    expect(stepWindow(160, 60, false, DAY_START, DURATION, OBSTACLE).start).toBe(40);
+  });
+
+  it("moves one candidate at a time, which is a half hour in open time", () => {
+    expect(stepWindow(0, 60, true, DAY_START, DURATION, []).start).toBe(30);
+  });
+
+  it("takes a block's edge when that comes before the next half hour", () => {
+    // From 30, the parked position at 40 is nearer than the half hour at 60.
+    expect(stepWindow(30, 60, true, DAY_START, DURATION, OBSTACLE).start).toBe(40);
+  });
+
+  it("does not move past the end of the day", () => {
+    expect(stepWindow(840, 60, true, DAY_START, DURATION, [])).toEqual({
+      start: 840,
+      end: 900,
+    });
+  });
+
+  it("steps one edge at a time and stops at a block", () => {
+    expect(stepEdge("end", 0, 60, true, DAY_START, DURATION, OBSTACLE).end).toBe(90);
+    expect(stepEdge("end", 0, 90, true, DAY_START, DURATION, OBSTACLE).end).toBe(100);
+    expect(stepEdge("end", 0, 100, true, DAY_START, DURATION, OBSTACLE).end).toBe(100);
+  });
+
+  it("honours the 30 minute floor when stepping inward", () => {
+    expect(stepEdge("end", 0, 60, false, DAY_START, DURATION, [])).toEqual({
+      start: 0,
+      end: 30,
+    });
+    expect(stepEdge("end", 0, 30, false, DAY_START, DURATION, [])).toEqual({
+      start: 0,
+      end: 30,
+    });
+  });
+});
+
+describe("resizing a window that already overlaps", () => {
+  // Only reachable by typing a range into the time inputs: no gesture can create
+  // it. The window straddles the block, so the block is neither entirely left of
+  // it nor entirely right of it.
+  const STRADDLED = { start: 120, end: 140 };
+
+  it("refuses to drag an edge through the block it is sitting on", () => {
+    expect(
+      resizeWindow("end", STRADDLED.start, STRADDLED.end, 500, DAY_START, DURATION, OBSTACLE),
+    ).toEqual(STRADDLED);
+    expect(
+      resizeWindow("start", STRADDLED.start, STRADDLED.end, -500, DAY_START, DURATION, OBSTACLE),
+    ).toEqual(STRADDLED);
+  });
+
+  it("will not step an edge through it either", () => {
+    expect(
+      stepEdge("end", STRADDLED.start, STRADDLED.end, true, DAY_START, DURATION, OBSTACLE),
+    ).toEqual(STRADDLED);
+  });
+
+  it("resolves the overlap on a body drag, which is the way out", () => {
+    expect(slideWindow(120, 20, 5, DAY_START, DURATION, OBSTACLE)).toEqual({
+      start: 160,
+      end: 180,
+    });
+  });
+});
+
+describe("reading a clock time", () => {
+  it.each(["00:00", "09:15", "14:30", "23:59"])("accepts %s", (value) => {
+    expect(isClock(value)).toBe(true);
+  });
+
+  it.each([
+    ["", "an empty field"],
+    ["1", "a single digit mid-entry"],
+    ["9:15", "a missing leading zero"],
+    ["24:00", "an hour past the day"],
+    ["12:60", "a minute past the hour"],
+    ["14:30:00", "a seconds-bearing time"],
+    ["half two", "prose"],
+  ])("rejects %s (%s)", (value) => {
+    expect(isClock(value)).toBe(false);
+  });
+
+  it("stops an unreadable range from passing as valid", () => {
+    // Before the guard: parseClock("") was NaN, every comparison against NaN was
+    // false, and toOffsets returned { start: NaN, end: 240 } as a good range. Add
+    // block stayed enabled and the POST carried a null offset.
+    const range = toOffsets("", "18:00", DAY_START, DURATION);
+    expect(range).toEqual({ error: { kind: "unreadable" } });
+  });
+});
+
+describe("stepping a clock time", () => {
+  it("advances an hour", () => {
+    expect(stepClock("14:00", 60)).toBe("15:00");
+  });
+
+  it("wraps forward past midnight, which is the reported case", () => {
+    expect(stepClock("23:00", 60)).toBe("00:00");
+  });
+
+  it("wraps backward past midnight", () => {
+    expect(stepClock("00:00", -60)).toBe("23:00");
+  });
+
+  it("carries from the minute segment into the hour", () => {
+    expect(stepClock("15:30", 30)).toBe("16:00");
+    expect(stepClock("16:00", -30)).toBe("15:30");
+  });
+
+  it("carries across midnight from the minute segment too", () => {
+    expect(stepClock("23:45", 30)).toBe("00:15");
+  });
+});
+
+describe("snapping a minute to a step", () => {
+  it.each([
+    [0, 0],
+    [14, 0],
+    [15, 30],
+    [22, 30],
+    [44, 30],
+    [45, 30],
+    [59, 30],
+  ])("snaps %i to %i on a half-hour field", (input, expected) => {
+    expect(snapMinute(input, 30)).toBe(expected);
+  });
+
+  it("never carries into the next hour", () => {
+    // Rounding 59 to 60 would advance the hour under someone who typed a minute.
+    expect(snapMinute(59, 30)).toBeLessThan(60);
+  });
+
+  it("leaves a free-entry field alone", () => {
+    expect(snapMinute(22, 1)).toBe(22);
+  });
+});
+
+describe("stepping to the next accepted minute", () => {
+  it("reaches the grid on the first press from an off-grid value", () => {
+    // The bug this exists to prevent: stepping by 30 from 15:45 gives 16:15,
+    // 16:45, 17:15, so a field accepting only :00 and :30 never lands on a value
+    // it accepts. firstFreeGap seeds exactly such a value from a block's end.
+    expect(stepToMultiple("15:45", 30, true)).toBe("16:00");
+    expect(stepToMultiple("15:45", 30, false)).toBe("15:30");
+  });
+
+  it("moves a whole step when already on the grid", () => {
+    expect(stepToMultiple("15:00", 30, true)).toBe("15:30");
+    expect(stepToMultiple("15:30", 30, true)).toBe("16:00");
+    expect(stepToMultiple("15:30", 30, false)).toBe("15:00");
+    expect(stepToMultiple("15:00", 30, false)).toBe("14:30");
+  });
+
+  it("wraps through midnight like every other step", () => {
+    expect(stepToMultiple("23:30", 30, true)).toBe("00:00");
+    expect(stepToMultiple("00:00", 30, false)).toBe("23:30");
+  });
+
+  it("falls back to single minutes on a free-entry field", () => {
+    expect(stepToMultiple("15:45", 1, true)).toBe("15:46");
+    expect(stepToMultiple("15:45", 1, false)).toBe("15:44");
   });
 });

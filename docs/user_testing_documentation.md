@@ -10,12 +10,19 @@ This document contains step-by-step manual test instructions for human testers. 
 
 ```bash
 docker compose up -d
-docker compose exec api alembic upgrade head   # first run only, or after an update
+```
+
+The `api` container runs `alembic upgrade head` as part of its start command, so
+migrations are applied for you. Run them by hand only when you are starting the
+API outside compose:
+
+```bash
+docker compose exec api alembic upgrade head
 ```
 
 Wait until `docker compose logs api` reports application startup complete. The API container listens on port 8000 internally and is published on **8787**, so the startup line says 8000 while you reach it at `http://localhost:8787`. Open the app at `http://localhost:5173`.
 
-If every page errors immediately after a fresh checkout, the migration step above was almost certainly skipped. Nothing runs it automatically.
+If every page errors immediately after a fresh checkout, check `docker compose logs api` for a migration failure. The container applies migrations on start, so a broken schema means they errored rather than that they were skipped.
 
 **Test account.** Use the Google account that is registered on the OAuth client (see `docs/setup/gcp_setup.md`). If the consent screen shows "Google hasn't verified this app", that is expected on the External path: click **Advanced**, then **Go to Doer**.
 
@@ -38,7 +45,8 @@ If neither technique is available in the build you are testing, mark every flow 
 | 1.2 | Click sign in with Google. | The Google consent screen opens. It lists the app name Doer, and requests identity plus calendar availability. It requests no write access to your calendar. |
 | 1.3 | Complete consent. | You land on the dashboard, signed in. |
 | 1.4 | Open Settings and find the calendar connection. | The calendar shows as connected, with a last-synced time. |
-| 1.5 | Sign out and sign back in. | Sign-in completes without showing the consent screen again. |
+| 1.5 | Sign out using the sign-out control. | The dashboard leaves the screen immediately, with no manual reload, and you land on the signed-out screen. Staying on the dashboard until you reload is a failure. |
+| 1.5a | Sign back in. | Sign-in completes without showing the consent screen again. |
 | 1.6 | Leave the app untouched for more than one hour, then reload the dashboard. | The dashboard loads normally. You are not asked to reconnect the calendar. (If you are, the access token is not being refreshed. Report it.) |
 
 ### Flow 2: Defining the day and preference blocks
@@ -163,7 +171,8 @@ This is the flow the product exists for. Test it carefully.
 | 12.4 | Check that no calendar event titles are visible anywhere in Doer. | Doer shows busy time, never event names. If you can see a meeting title, that is a failure. |
 | 12.5 | Revoke Doer's access at `myaccount.google.com/permissions`, then reload the dashboard. | The app still loads and is fully usable. A non-blocking banner invites you to reconnect. Capacity now reflects focus-block time with no busy-time subtraction, and the day is marked as computed without calendar data. |
 | 12.6 | Reconnect the calendar. | Consent completes and capacity returns to including busy time. |
-| 12.7 | Stop your machine's network connection and reload. | The app does not hang or error on the calendar. The last synced snapshot is used, and a staleness indicator appears if it predates the day start. |
+| 12.7 | With the dashboard already loaded, stop your machine's network connection, then act on a task. | The app does not hang or throw on the calendar. Do **not** reload: offline, the app cannot mount the dashboard at all, so a reload shows only the failure to load and proves nothing about the snapshot. |
+| 12.8 | Restore the network, then check the capacity line against a calendar snapshot older than the current day's start. | The last synced snapshot is used and a staleness indicator appears. If no snapshot that old is available, mark this step blocked rather than passing it. |
 
 ### Flow 13: Missing configuration
 
@@ -192,3 +201,91 @@ This flow has no pass or fail assertion in code. It is a judgment pass, and it i
 | 15.2 | Count the interactive elements visible without scrolling. | The dashboard shows today only. There is no backlog, no project list, no sidebar of other views. |
 | 15.3 | Trigger the over-committed state. | The signal reads as information, not as alarm. Report it if it feels like nagging. |
 | 15.4 | Use the app for one real day end to end. | Nothing interrupted you, nothing notified you, and the day's outcome was unambiguous at the end. |
+
+### Flow 16: Dragging the block window on the day timeline
+
+This flow is the **only** gate on the drag behaviour. The geometry beneath it is covered by automated tests, but the pointer and keyboard wiring is not, by a deliberate decision recorded in ADR 0002. Treat a failed step here exactly as you would a failed automated test: it blocks.
+
+**A note on the time fields.** All three fields on this page use a 24-hour clock
+with no AM or PM, as of 2026-10-23. **From** and **Until** accept only `:00` and
+`:30`. **Starts** accepts any minute, because the day's start shifts the whole
+half-hour grid. Flow 17 covers the fields themselves.
+
+**Setup.** This flow uses the same day shape as Flow 2: a day starting at **14:00** running **15 hours**, so it ends at 05:00. Set it in Settings if you have not already run Flow 2. Then make the block list contain exactly one block, **Deep work, 15:00 to 18:00**, removing any others. The timeline bar under "How your day is split" now shows one green block with free time either side of it, and a dashed window at 14:00 to 15:00. That dashed window is the block you are about to add; it is not saved until you press Add block.
+
+Throughout this flow, the **From** and **Until** fields below the bar should mirror the dashed window at all times. Check them on every step. If the bar and the fields ever disagree, that is a failure; note which one looked right.
+
+| Step | Action | Expected result |
+|---|---|---|
+| 16.1 | Hover over the middle of the dashed window. | The cursor becomes a grab cursor. Handles are visible at the window's left and right edges. |
+| 16.2 | Press and hold in the middle of the window, drag slowly to the right past the green block, and release in the open space after 18:00. | The window moves in half-hour steps, never smoothly with the cursor. From and Until show clean half-hour times, for example 19:00 and 20:00. |
+| 16.3 | Drag the body left and right without releasing, and watch the window's width. | The width never changes while you are dragging the body. Only its position does. |
+| 16.4 | Drag the body left towards the green block and keep pushing past it. | The window stops flush against the block's right edge, reading 18:00 as its start, with no visible gap and no sliver of empty space between them. It stays there as you keep pushing. |
+| 16.5 | Keep dragging left, further past the block. | At some point the window jumps to the near side of the block and sits flush against it, reading 14:00 to 15:00. It never at any moment overlaps the green block, and it never pushes or resizes the block. |
+| 16.6 | Reverse direction and drag back to the right. | The window pops across again at the same place it popped before. It never overlaps the block in either direction. |
+| 16.7 | Drag the window all the way to the right-hand end of the bar. | The window stops at the end of the day. No part of it extends past the bar's right edge, and Until reads 05:00. |
+| 16.8 | Drag the window all the way to the left-hand end. | The window stops at 14:00, reading 14:00 to 15:00. Both handles are still visible and grabbable; neither is cut off by the bar's edge. |
+| 16.9 | Grab the **right** handle and drag it left, towards the window's own left edge, and keep going. | Only the right edge moves; the left edge stays at 14:00. The window shrinks to 30 minutes, reading 14:00 to 14:30, and stops. It never reaches zero width and the two edges never swap places. |
+| 16.10 | Drag the right handle back to the right, past 15:00, and keep going. | The right edge stops flush at 15:00, against the green block. It does **not** jump to the far side of the block, even though 18:00 onwards is free. This differs from step 16.5 on purpose: bodies jump, edges do not. |
+| 16.11 | Grab the **left** handle, drag it right towards the window's own right edge, and keep going. | Only the left edge moves. The window shrinks to 30 minutes, reading 14:30 to 15:00, and stops. |
+| 16.12 | Drag the left handle back to the left and keep going. | The left edge stops at 14:00, the start of the day, and goes no further. |
+| 16.13 | Position the window somewhere clean, press **Add block**, then press Remove on the block you just added. | The block appears in the list with the times the window showed, then disappears again. The dashed window reappears in a free stretch. |
+| 16.14 | Remove the Deep work block, then add one running **15:00 to 15:45** by setting Until with the arrow keys from 15:00 and stopping at 15:30, then widening it on the bar. If you cannot reach 15:45 at all, that is expected and this step is satisfied: From and Until accept only :00 and :30 as of 2026-10-23. Instead, use an existing odd block if your account has one, or skip to 16.16. | Recorded so a tester is not left hunting. The window's own length can still be odd when the app proposes it, because a suggestion inherits the granularity of whatever block it follows. |
+| 16.15 | If you have an odd-length window from any route, drag it up against a green block from the right-hand side. | It parks exactly flush against the block, with no gap, even though its other edge is not on a half hour. If no odd-length window is reachable, mark this step blocked rather than passed. |
+| 16.16 | Press and hold the window body, and **while still holding**, switch to another application and back to the browser, then finish the drag. | The window is still where you left it and the drag finishes normally. It must not jump back to a suggested position partway through. |
+| 16.17 | Hover over the green Deep work block itself. | Its tooltip still appears, reading "deep work: 15:00 to 18:00". If no tooltip appears, the new overlay is blocking it. |
+| 16.18 | Press Tab until focus reaches the timeline. | Focus lands on the window body and on each handle, with a visible focus ring. |
+| 16.19 | With the window body focused, press the left and right arrow keys. | The window moves one half-hour step per press, obeying the same parking and popping rules as the pointer. |
+| 16.20 | With a handle focused, press the left and right arrow keys. | Only that edge moves, one step per press, with the same 30-minute floor. |
+| 16.21 | Narrow the browser window to roughly phone width and repeat steps 16.2 and 16.9. | The bar shrinks with the page. The window is still draggable and both handles are still grabbable, even though they are now only a few pixels apart. |
+| 16.22 | Set the day duration to 24 hours and repeat step 16.2 with a 30-minute window. | Still draggable. This is the narrowest the window ever gets, around 13 pixels, and is the hardest case for grabbing it. Report it if it feels unusable rather than merely small. |
+| 16.23 | Switch your operating system between light and dark appearance with the timeline on screen. | The window, its handles and the blocks all remain legible in both. |
+
+**Phase-shifted day.** Blocks are stored as an offset from the start of the day, not as a wall-clock time, so moving the day's start moves every block with it. This is the case most likely to be subtly wrong, and the only one where correct arithmetic and a wrong pixel conversion look different on screen. Run it last.
+
+| Step | Action | Expected result |
+|---|---|---|
+| 16.24 | Set the day start to **14:15**, keeping the 15 hour duration, and save. | The day now runs 14:15 to 05:15, and the Deep work block has moved with it, now reading **15:15 to 18:15**. |
+| 16.25 | Drag the dashed window's body across the open part of the bar. | The times it lands on are 14:30, 15:00, 15:30 and so on: still real half hours, not 14:15, 14:45, 15:15. The day's odd start does not drag the whole grid off the half hours with it. |
+| 16.26 | Drag the window up against the Deep work block from the left. | It parks flush at **15:15**, which is not a half hour. This is correct and is the point: the window snaps to half hours *and* to the edges of blocks, so parking never leaves an unusable gap. |
+| 16.27 | Drag the window's left edge to the very start of the day, then shrink it from the right as far as it will go. | The left edge can sit at 14:15, but the smallest window starting there is **14:15 to 15:00**, 45 minutes. A 15 minute window reading 14:15 to 14:30 must not be reachable: no window is ever shorter than 30 minutes, including at the day's own edges. |
+| 16.28 | Set the day start back to 14:00. | The block returns to 15:00 to 18:00 and the grid returns to the plain half hours. |
+
+**Reporting note for this flow.** If the window ever visually overlaps a green block during a body drag, even for a single frame, record it with the step number and what you were doing. That is the one invariant the whole design rests on.
+
+### Flow 17: The time fields
+
+Three fields on Settings take a clock time: **Starts**, under "Your day", and
+**From** and **Until**, under "How your day is split". All three were replaced on
+2026-10-23. They are no longer the browser's own time control, so their behaviour
+is now the same on every machine, which it was not before.
+
+Two rules differ between them, deliberately. **From** and **Until** accept only
+`:00` and `:30`, matching the timeline drag. **Starts** accepts any minute,
+because the day's start shifts the entire half-hour grid: a day beginning at 14:15
+puts the half hours at 14:30 and 15:00.
+
+| Step | Action | Expected result |
+|---|---|---|
+| 17.1 | Look at all three fields. | No AM or PM appears anywhere on the page. Every time reads as two digits, a colon, two digits. Midnight reads **00:00**, not 12:00 AM. One o'clock in the afternoon reads **13:00**, not 1:00 PM. |
+| 17.2 | Click the Starts field once, on its **hour** half. | The field takes focus and the hour is highlighted. |
+| 17.3 | Press the up arrow repeatedly from 09:00 until you pass noon. | The hour counts 10, 11, 12, **13**, 14. It must not go back to 1, and no AM or PM must appear. This is the originally reported fault. |
+| 17.4 | Set the hour to 23 and press up once more. | It reads **00**. The clock wraps to the start of the day rather than stopping. |
+| 17.5 | Press the down arrow once from 00. | It reads **23**. The wrap works in both directions. |
+| 17.6 | Click directly on the **minute** half of the Starts field. | The minutes highlight, not the hours. Clicking a segment must select that segment. |
+| 17.7 | With the minutes selected, press the up arrow. | The minutes count up one at a time. Starts accepts any minute. |
+| 17.8 | Press the right and left arrow keys. | Focus moves between the hour and minute halves without changing the time. |
+| 17.9 | With the hour selected, type **1** then **4**. | The field shows 14. A single digit that cannot begin a legal hour, such as 9, should resolve on its own without waiting for a second. |
+| 17.10 | Type **14:15** into Starts and click elsewhere. | It keeps 14:15 exactly. Starts does not round. |
+| 17.11 | In the **From** field, select the minutes and press the up arrow several times. | The minutes go 00, 30, 00, carrying the hour as they wrap. If the field starts on some other value, because the app proposed a time following an existing block, the first press moves it onto 00 or 30 and it stays there afterwards. |
+| 17.12 | Type **22** into the From field's minutes. | It settles on **30**, the nearer of the two values the field accepts. |
+| 17.13 | Type **45** into the From field's minutes. | It settles on **30**. Going back to 30 rather than forward to the next hour is deliberate: the hour is a segment you did not touch, and moving it would be the greater surprise. Report it if it feels wrong, but it is not a fault. |
+| 17.14 | Press Tab from the field before Starts, through Starts, to the field after it. | Each clock field is a **single** tab stop. Tab must not have to be pressed twice to get past one. |
+| 17.14a | Move to the minute half of a field with the right arrow, Tab away, then Shift-Tab back to it. | Focus returns to the **minute** half, not the hour. This is correct: the field remembers where you were, the way the native control did. |
+| 17.15 | Focus a clock field, type one digit, then press Backspace. | The field goes back to the time it was showing before you typed. Nothing anywhere reads "NaN". The rest of the page does not react to a half-entered time at all: the Add block button keeps whatever state it had, which is correct, since a partial entry is not a new time and must not be treated as one. |
+| 17.16 | Set Until past the end of your day, for example 07:00 on a day ending at 05:00, then click away. | It pulls back to the end of the day. It must not do this while you are still typing, only once you leave the field. |
+| 17.17 | Set a block with the fields, press Add block, and check the list below. | The block appears with exactly the times the fields showed, in 24-hour form. |
+
+**Reporting note.** If AM or PM appears anywhere at all, or if an hour refuses to
+pass 12, record the step and your computer's language and region settings. Those
+settings used to decide this behaviour and no longer should.

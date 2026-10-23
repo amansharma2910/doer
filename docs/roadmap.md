@@ -1,7 +1,7 @@
 ---
 type: roadmap
 created: 2026-10-20
-updated: 2026-10-21
+updated: 2026-10-23
 ---
 
 # Roadmap
@@ -50,6 +50,13 @@ reporting, push-based calendar sync, and any background worker or Redis.
 
 - [x] daily-task-planner: Daily commitment planner with 4-task cap, 75% success rule, user-defined logical day, and read-only Google Calendar capacity input (plan: v1, status: in_progress)
 - [ ] provisional-day-signal: Live on-track or behind state for the day in progress in the history heatmap, additive to the persisted verdict (plan: v1, status: draft)
+- [ ] timeline-window-drag: Drag and resize the dashed preference block window directly on the day timeline, snapping to wall-clock half hours and to block edges, magnetically kept clear of existing blocks (plan: v1, status: draft)
+
+The timeline-window-drag box is unticked on purpose, and no longer because of
+testing: both gates pass as of 2026-10-23. Two conditions of the definition of
+done are still unmet. Its plan reads `status: draft`, which only release-mode or
+fix-mode may change, and `docs/releases/CHANGELOG.md` has no entry for it. See
+Next Up item 5.
 
 Plan status stays `in_progress` rather than `shipped`: release-mode sets `shipped`
 at ship time, and nothing has shipped, because deployment is deliberately out of
@@ -61,7 +68,11 @@ v1 scope. The implementation is complete.
 - [x] heatmap-utc-date-shift: The history grid was labelled in UTC while cells are keyed by anchor dates in the user's timezone, so every label ran a day early (fix: high, status: verified)
 - [x] tests-wipe-production-database: The suite dropped the schema of whatever DATABASE_URL named, and the api container names production, so running it destroyed all application data (fix: critical, status: verified)
 - [x] signout-leaves-page-frozen: queryClient.clear() orphaned the mounted observers on stale success, so signing out left the dashboard on screen until a manual reload (fix: high, status: verified)
+- [x] time-inputs-show-12-hour-clock: The three Settings time fields rendered a 12-hour clock with AM/PM, because `<input type="time">` takes its format from the browser locale and cannot be constrained; replaced with a custom 24-hour ClockInput (fix: low, status: verified)
 - [x] pnpm-store-committed-to-history: The compose web service wrote pnpm's package store onto the host bind mount and nothing ignored it, so 122 MB and 7,863 files entered git history, 98.1% of the repository by size (fix: medium, status: verified)
+
+All six fixes are verified. Flow 17, the manual gate on the clock field, was run
+and reported passing on 2026-10-23, alongside Flow 16 for the timeline drag.
 
 ## Business Objective Coverage
 
@@ -147,51 +158,135 @@ Checked on 2026-10-21 rather than asserted:
 4. **provisional-day-signal, plan v1 is draft.** Architecture-mode next: the two
    open questions that decide the shape are how "substantially elapsed" is defined
    and whether `scheduled_primary` becomes live-when-open in the same change.
-5. **Harden the test separation with a database role.** `doer` and `doer_test`
+5. **timeline-window-drag is built; the manual gate has not been run.** ADR 0002
+   (accepted 2026-10-22) settles grid-plus-flush snapping, an unclipped overlay
+   layer for the handles, pure geometry in `daytime.ts` with a humble component,
+   and no DOM test harness. The survey behind it found plan v1's M1, M2 and M6
+   mutually unsatisfiable whenever a block or a window is off the half-hour grid;
+   those requirements were corrected in place, a clarification rather than a scope
+   change, so the plan stays at v1.
+
+   Implemented 2026-10-23 in `frontend/src/lib/daytime.ts`,
+   `frontend/src/components/DayTimeline.tsx` and `frontend/src/pages/Settings.tsx`.
+   The frontend suite went from 74 tests to 117: 33 new geometry cases and 10 new
+   markup cases, with every pre-existing test unmodified. `pnpm lint` and the
+   production build are green and `package.json` is unchanged, so ADR 0002's
+   no-new-dependency decision held in practice. (The suite has since reached 158
+   with the clock field fix; see item 6.)
+
+   **Flow 16 passed**, run manually and reported by the user on 2026-10-23. ADR
+   0002 named it the gate on the roughly 60 lines of pointer wiring that ship
+   without automated coverage, so the feature is now verified end to end. All 28
+   steps, including the phase-shifted day at 14:15.
+
+   **Still open before this counts as done**, both outside roadmap-mode's
+   authority to change: the plan's frontmatter reads `status: draft`, and
+   `docs/releases/CHANGELOG.md` has no entry. Neither is a quality question now.
+
+   **Two additions beyond the plan, both deliberate.**
+   `frontend/src/__tests__/day_timeline.test.tsx` renders the component with
+   `react-dom/server`, which needs no DOM and no new dependency, and asserts
+   markup structure only: ARIA on both handles, three tab stops, the overlay
+   passing pointer events through, and the read-only bar rendering unchanged with
+   no handler passed. It does not test gestures and does not reopen the harness
+   decision. Separately, `doc-crawler` found a real defect by executing the
+   module: an edge drag could pass straight through a block when the window
+   already straddled one, because such a block is neither entirely left of the
+   window nor entirely right of it and the barrier fell back to the day's edge.
+   Fixed, with three tests.
+
+   **The `freeGaps` question is settled.** Dropped on the user's instruction,
+   2026-10-23. `firstFreeGap` and its tests are untouched, which honours S5 more
+   strongly than rewriting them would. ADR 0002 carries a dated withdrawal of the
+   clause rather than a deletion, so the decision as accepted stays legible.
+
+6. **time-inputs-show-12-hour-clock is applied; its manual gate is unrun.** The
+   three Settings time fields rendered a 12-hour clock because
+   `<input type="time">` takes its format from the browser's locale. Verified
+   against engine source rather than assumed: Firefox never reads the `lang`
+   attribute for this control, and release Chromium discards it behind a flag that
+   ships with no status, which its own feature file defines as disabled
+   everywhere. The CSS route to hiding AM/PM is Chromium-only and leaves the hour
+   still cycling 1 to 12. Both apparent one-line fixes would have shipped and
+   failed, which is why the analysis was worth doing before the code.
+
+   The reported symptom was itself a misreading the control invited: `12:00 AM` is
+   the display of the value `00:00`, so stepping to `01:00` was correct. No data
+   was ever wrong, and every other time surface in the app already read 24-hour.
+
+   Applied 2026-10-23 as `frontend/src/components/ClockInput.tsx` plus three call
+   sites and new clock arithmetic in `daytime.ts`. The suite is at 158 tests
+   across 6 files, lint and build green, `package.json` still unchanged.
+
+   **Two decisions here were changed behaviour, not restored behaviour**, and are
+   recorded as dated amendments to ADR 0002, `timeline-window-drag_doc.md` and the
+   timeline plan rather than as edits, so a revert restores their original meaning:
+   From and Until now accept only `:00` and `:30`, which closes one of the four
+   routes to an off-grid time that ADR 0002 relied on; and Starts keeps free minute
+   entry, because snapping it would make the phase-shifted grid unreachable through
+   the interface and Flow 16.24 to 16.28 unrunnable.
+
+   **Flow 17 passed**, all 18 steps, run manually and reported on 2026-10-23. The
+   fix plan is `verified`.
+
+   **Found by review, not by tests.** `doc-crawler` caught a regression introduced
+   by the fix itself: `onCommit` fired before React had applied the value `settle()`
+   had just emitted, so the end-of-day clamp evaluated against a stale time
+   whenever the last keystroke left a pending digit. The settled value is now
+   passed to `onCommit` directly. It also caught that arrow-stepping a snapped
+   field by 30 from an off-grid seed never reached the grid (15:45, 16:15, 16:45),
+   fixed by `stepToMultiple`, and an accessibility regression against the native
+   control, fixed by giving each segment real spinbutton semantics under roving
+   focus. Earlier in the same change, the first version of the control had no
+   working pointer path to the minute segment at all.
+
+   While here, every line number was dropped from ADR 0002 and only file names
+   kept. Eight of its citations had drifted, and a document whose references
+   cannot be trusted is worse than one that is less precise.
+
+7. **Harden the test separation with a database role.** `doer` and `doer_test`
    share a cluster, a role and a password, so the suite is kept off production by
    two assertions rather than by permissions. A role with no rights on `doer` is
    the version that holds against a malformed URL or a future rewrite of the
    harness. Deferred deliberately in
    `docs/fixes/fix_plan_tests-wipe-production-database.md`.
-6. **Documents doc-crawler flagged and this pass did not change**, each owned by a
-   mode that has not run: `docs/user_testing_documentation.md` lines 13 and 18
-   claim nothing runs migrations automatically, which contradicts the container
-   start command (qa-mode owns that file); `docs/releases/CHANGELOG.md` has no
-   `[Unreleased]` entries for today's three fixes or the heatmap endpoint change
-   (release-mode); and `.env.example` line 4 disagrees with
+8. **Documents doc-crawler flagged that are still wrong**, each owned by a mode
+   that has not run. The `docs/user_testing_documentation.md` migration wording is
+   fixed as of 2026-10-22, verified against `docker-compose.yml:28`. Still open:
+   `docs/releases/CHANGELOG.md` has no
+   `[Unreleased]` entries for the three 2026-10-21 fixes or the heatmap endpoint
+   change (release-mode); and `.env.example` line 4 disagrees with
    `docs/setup/gcp_setup.md` line 130 about the database host, which sends a
    reader following one of them to a connection failure and the other to
    production.
-7. **Sign-out is unplanned and unmeasured.** Plan v1 §4 lists no requirement for
+9. **Sign-out is unplanned and unmeasured.** Plan v1 §4 lists no requirement for
    session termination and AC-01 to AC-21 contain no criterion for it, so the
    control fills an unenumerated gap rather than satisfying a commitment. It also
    emits no event, where sign-in emits `user_signed_in`, so the tracking plan's
    31-event inventory is unchanged while a new user-facing transition exists.
    Worth a decision in metrics-mode rather than a silent asymmetry.
-8. **qa-mode wanted for `docs/user_testing_documentation.md`.** Flow 1 step 1.5
-   told a tester to sign out when no control existed, so it was not performable
-   as written; it is now, but asserts nothing about the fixed behaviour. Flow 12.7
-   is false and was false before today: offline, the app never mounts the
-   dashboard, so neither the stale snapshot nor the staleness indicator can be
-   observed. No flow covers sign-out at all.
-9. **Fix plan wanted for the Docker build context.** No `.dockerignore` exists, so
+10. **Fix plan wanted for the Docker build context.** No `.dockerignore` exists, so
    the context carries roughly 264 MB of ignored-but-copied artifacts, and
    `Dockerfile:27` copies the host's darwin-arm64 `node_modules` over the linux
    install from line 26. The size half is cosmetic; the overlay half is a
    correctness question that no build has been run to settle. Declined as
    out-of-scope in `docs/fixes/fix_plan_pnpm-store-committed-to-history.md`.
-10. **`README.md` does not reach the fix plans, and no mode owns it.** Its "Where
-   the thinking is written down" table lists six documents and omits
-   `docs/fixes/` entirely, so none of the five fix plans is discoverable from the
-   entry point, and the 2026-10-21 history rewrite is recorded nowhere a reader
-   starting at the README would find it. The re-clone guidance now lives in
+11. **`README.md` does not reach the fix plans or the newer ADR, and no mode owns
+   it.** Its "Where the thinking is written down" table lists six documents and
+   omits `docs/fixes/` entirely, so none of the five fix plans is discoverable
+   from the entry point, and the 2026-10-21 history rewrite is recorded nowhere a
+   reader starting at the README would find it. As of 2026-10-23 the table also
+   omits ADR 0002 and both newer plans, so the ADR index it presents is no longer
+   complete. Its "## Tests" section lists only the backend `pytest` invocations
+   and never mentions `cd frontend && pnpm test`, so a reader following the README
+   alone never runs the 158 frontend tests. The re-clone guidance now lives in
    `docs/doer/DOCUMENTATION.md`. `README.md` appears in no row of CLAUDE.md's
    file ownership table, so this needs either a user decision or a new owner.
-11. **Fix plan wanted for the busy-subtraction wipe.** Nine of the eleven
+12. **Fix plan wanted for the busy-subtraction wipe.** Nine of the eleven
    `recompute_capacity` call sites pass no `busy`, inflating a calendar-connected
    user's threshold after any task write. Found during the stale-block-snapshot
    analysis and deliberately left out of that fix's scope.
-12. **Post-launch review** after 30 scored days: re-enter metrics-mode, answer the
+13. **Post-launch review** after 30 scored days: re-enter metrics-mode, answer the
    five questions in tracking plan §6 in order, and write the verdict back.
-13. **release-mode** only if and when deployment is wanted. That is a v2 decision,
+14. **release-mode** only if and when deployment is wanted. That is a v2 decision,
    and ADR 0001 names Cloud Run plus managed Postgres as the indicated path.

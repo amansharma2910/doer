@@ -1,6 +1,8 @@
 # Doer: Project Documentation
 
-Last updated 2026-10-21, after milestones M1 to M7 and the pnpm store history rewrite.
+Last updated 2026-10-23, after the timeline-window-drag feature and the
+24-hour clock field fix. Before that,
+2026-10-21, after milestones M1 to M7 and the pnpm store history rewrite.
 
 ## Drift Notes
 
@@ -41,8 +43,14 @@ Known gaps between what the documents promise and what the code does.
    Needs its own fix plan.
 
 Closed on 2026-10-21: carry-forward demotions are now surfaced in the task list;
-a frontend test suite exists (Vitest, 74 tests covering the heatmap colour rules
-and contract-refusal decoding); and migrations run on container start.
+a frontend test suite exists; and migrations run on container start.
+
+Open as of 2026-10-23, from `timeline-window-drag`: the pointer and keyboard
+gestures on the settings timeline have no automated coverage. This is a decision
+rather than an omission (ADR 0002 declined a DOM test harness), and Flow 16 of
+`docs/user_testing_documentation.md` is the agreed gate. A failed step there
+blocks exactly as a failed test does. The geometry beneath the gestures is
+covered exhaustively as pure functions.
 
 ## 1. Project Structure
 
@@ -70,12 +78,29 @@ doer/
 │                           assistant, metrics, google_oauth, token_store, llm
 └── frontend/src/
     ├── App.tsx             auth gate and router: offline, loading, sign-in, outage
-    ├── lib/                api client, typed hooks, wire types
+    ├── lib/                api client, typed hooks, wire types; daytime.ts holds
+    │                       day/offset arithmetic, clock parsing and formatting,
+    │                       and timeline placement geometry
     ├── pages/              SignIn, Dashboard, Settings
-    └── components/         TaskList (dnd), AddTask, Chat, Heatmap
+    └── components/         TaskList (dnd-kit reorder), DayTimeline (drag and
+                            resize), ClockInput (24-hour time entry), AddTask,
+                            Chat, Heatmap
 ```
 
-Roughly 5,000 lines of application code and 2,400 of tests.
+Two unrelated drag surfaces, worth not confusing. Task reordering uses
+`@dnd-kit`; the settings timeline uses native pointer capture against a custom
+constraint solver in `daytime.ts`, and `@dnd-kit` is not involved in it.
+
+**Times are entered through `ClockInput`, never `<input type="time">`.** The
+native control picks 12-hour or 24-hour from the browser's locale and cannot be
+constrained: Firefox ignores the `lang` attribute for it, and release Chromium
+discards it behind a flag that ships disabled. Every time surface in the app is
+24-hour, so the native control was the only one disagreeing with the rest. See
+`docs/fixes/fix_plan_time-inputs-show-12-hour-clock.md`.
+
+The line counts previously given here (roughly 5,000 application, 2,400 test) are
+stale as of 2026-10-23 and are removed rather than re-estimated, since the method
+used to produce them was never recorded.
 
 ## 2. Third-Party Dependencies
 
@@ -242,7 +267,10 @@ uv run pytest -m live     # 7 more that call the real model and cost money
 ```
 
 ```bash
-cd frontend && pnpm test  # 74 tests: heatmap rules, error decoding, sign-out teardown
+cd frontend && pnpm test  # 158 tests: day/offset arithmetic, clock stepping and
+                          # timeline placement (114), heatmap rules (12), clock
+                          # field markup (11), timeline markup (10), sign-out
+                          # teardown (7), error decoding (4)
 ```
 
 The suite drops and re-migrates the schema of the database it is pointed at, so
