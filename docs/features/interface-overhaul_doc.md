@@ -193,9 +193,19 @@ and `View` moved from `components/Heatmap.tsx` to `lib/heatmap.ts`.
 - **`css: true` in the test config is load-bearing.** Vitest stubs CSS imports
   to an empty string by default, including `?raw` ones, which would make
   `tokens.test.ts` pass by vacuity against an empty file.
-- **The bottom band is one token.** `--spacing-tabbar` and `--spacing-dock` are
-  consumed by `Nav`, `AppShell`, `TaskEntry` and `Today`. Four files used to
-  hard-code their own values while a comment claimed one of them was canonical.
+- **The bottom band is three tokens.** `--spacing-tabbar`,
+  `--spacing-tabbar-clear` and `--spacing-dock` are consumed by `Nav`,
+  `AppShell`, `TaskEntry` and `Today`. Four files used to hard-code their own
+  values while a comment claimed one of them was canonical.
+
+  It was two tokens until 2026-10-24, and the missing one was a defect rather
+  than a simplification. `AppShell` reserved `pb-tabbar`, exactly the bar's own
+  height, so the last line of a compact page sat on the bar's top border with no
+  gap while the desktop layout kept 2.5rem from `sm:pb-10`. On Settings that put
+  the focus-time figures flush under the navigation and read as an overlap.
+  `--spacing-tabbar-clear` is the bar plus that same rhythm, and a token test
+  asserts it stays greater than `--spacing-tabbar`, because clearing a fixed
+  element means clearing it *and* keeping the margin the layout would have had.
 - **Four defects were found by `doc-crawler` after the phase gates passed**, and
   every one has a regression test: the rolling window counting future days;
   `formatAnchorDate` rendering `2026-13-45` as a confident "Sunday, February 14"
