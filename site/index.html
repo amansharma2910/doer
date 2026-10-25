@@ -1,0 +1,957 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Doer: four tasks, no fifth</title>
+<meta name="description" content="A daily planner built on one rule: at most four tasks that count, and the day is kept if you finish at least 75% of them. Open source and self-hosted.">
+<meta property="og:title" content="Doer: four tasks, no fifth">
+<meta property="og:description" content="A self-hosted daily planner built on one rule. Your day is not the calendar's day, and over-commitment is shown, not shouted.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect x='4' y='4' width='8' height='8' transform='rotate(45 8 8)' fill='%2316181d'/></svg>">
+<style>
+/* Every colour, radius, shadow and type step below is the literal value from
+   frontend/src/index.css, so this page and the application are the same object
+   seen from two sides. A value that drifts here is a bug there too.
+
+   Only the tokens this page actually draws with are carried over. A copied
+   value nothing renders is drift surface with no symptom, which is worse than
+   an absent one. Nothing enforces the match: tokens.test.ts reads index.css
+   and has no reach outside frontend/. */
+:root {
+  --ink: #16181d;
+  --paper: #fbfaf8;
+  --muted: #6c717a;
+  --line: #e6e4e0;
+  --success: #2f9e5e;
+  --failure: #c5443b;
+  --risk-mark: #c97922;
+
+  --raised: #ffffff;
+  --wash: rgb(0 0 0 / 0.03);
+  --hairline: rgb(0 0 0 / 0.045);
+
+  --radius-mark: 2px;
+  --radius-control: 6px;
+  --radius-panel: 12px;
+
+  --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.04), 0 1px 1px rgb(0 0 0 / 0.03);
+  --shadow-float: 0 8px 24px -6px rgb(0 0 0 / 0.12), 0 2px 6px rgb(0 0 0 / 0.05);
+
+  --caption: 0.6875rem;
+  --note: 0.75rem;
+  --body: 0.875rem;
+  --heading: 1.0625rem;
+
+  --gutter: 1.5rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #ecebe8;
+    --paper: #15161a;
+    --muted: #8a8f98;
+    --line: #2a2c32;
+    --success: #2f9e5e;
+    --failure: #d06a62;
+    --risk-mark: #d98324;
+
+    --raised: #1c1e23;
+    --wash: rgb(255 255 255 / 0.05);
+    --hairline: rgb(255 255 255 / 0.06);
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 1rem;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; }
+
+.wrap { max-width: 60rem; margin: 0 auto; padding: 0 var(--gutter); }
+.col { max-width: 40rem; }
+
+/* ── Masthead ───────────────────────────────────────────────────────────── */
+
+.masthead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gutter);
+  padding: 1.25rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.mark {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  font-size: var(--heading);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+}
+.mark .diamond {
+  width: 10px; height: 10px;
+  transform: rotate(45deg);
+  background: var(--ink);
+}
+.masthead nav {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  font-size: var(--note);
+  color: var(--muted);
+}
+.masthead nav a { text-decoration: none; }
+@media (max-width: 30rem) { .masthead nav a:not(.repo) { display: none; } }
+.masthead nav a:hover { color: var(--ink); }
+.masthead .repo { color: var(--ink); }
+
+/* ── Buttons ────────────────────────────────────────────────────────────── */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem;
+  border-radius: var(--radius-control);
+  font-size: var(--body);
+  font-weight: 500;
+  text-decoration: none;
+  border: 1px solid var(--line);
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+.btn-solid {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+.btn-solid:hover { opacity: 0.88; }
+.btn-ghost { background: var(--raised); color: var(--ink); box-shadow: var(--shadow-raised); }
+.btn-ghost:hover { border-color: var(--muted); }
+.btn svg { width: 15px; height: 15px; }
+
+/* ── Rhythm ─────────────────────────────────────────────────────────────── */
+
+section { padding: 4.5rem 0; }
+
+.eyebrow {
+  font-size: var(--caption);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin: 0 0 0.75rem;
+}
+h1 {
+  font-size: clamp(2.25rem, 7vw, 3.5rem);
+  line-height: 1.04;
+  letter-spacing: -0.035em;
+  font-weight: 500;
+  margin: 0;
+}
+h2 {
+  font-size: clamp(1.5rem, 3.6vw, 2rem);
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+  font-weight: 500;
+  margin: 0 0 1rem;
+}
+h3 {
+  font-size: var(--heading);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  margin: 0 0 0.375rem;
+}
+p { margin: 0 0 1rem; }
+.lede { font-size: 1.125rem; line-height: 1.55; color: var(--muted); }
+.lede strong { color: var(--ink); font-weight: 500; }
+.sub { color: var(--muted); }
+.note { font-size: var(--note); color: var(--muted); }
+.tight { margin-bottom: 0; }
+
+/* ── Hero ───────────────────────────────────────────────────────────────── */
+
+.hero { padding: 5rem 0 4rem; }
+.hero h1 { max-width: 16ch; }
+.hero .lede { margin-top: 1.5rem; max-width: 46ch; }
+.actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 2rem; }
+.hero .note { margin-top: 1.25rem; }
+
+/* ── The Today mockup ───────────────────────────────────────────────────── */
+
+.screen {
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-float);
+  padding: 1.5rem;
+  font-size: var(--body);
+  line-height: 1.375rem;
+  max-width: 30rem;
+}
+.screen-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.screen-head .date {
+  font-size: var(--heading);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+.risk-dot {
+  width: 7px; height: 7px;
+  border-radius: 999px;
+  background: var(--risk-mark);
+  flex: none;
+}
+.slots { display: flex; align-items: center; gap: 0.375rem; margin: 0; padding: 0; list-style: none; }
+.slots li { width: 10px; height: 10px; transform: rotate(45deg); }
+.slots .filled { background: var(--ink); }
+.slots .empty { border: 1px solid var(--line); }
+.slot-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  margin-top: 0.75rem;
+}
+.capacity { margin-top: 0.75rem; font-size: var(--note); color: var(--muted); }
+.capacity .num { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+.group-label {
+  font-size: var(--note);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin: 1.75rem 0 0.5rem;
+}
+.rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.25rem; }
+.row {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.5rem 0.25rem;
+}
+.check {
+  width: 20px; height: 20px;
+  flex: none;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-mark);
+  display: grid;
+  place-items: center;
+  color: transparent;
+}
+.check.done { border-color: var(--success); color: var(--success); }
+.check svg { width: 12px; height: 12px; }
+.row .title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .est { font-size: var(--note); font-variant-numeric: tabular-nums; color: var(--ink); flex: none; }
+.row .est.running { color: var(--muted); }
+.row.complete .title { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--line); }
+
+/* ── The logical day diagram ────────────────────────────────────────────── */
+
+.daybar { margin-top: 2rem; max-width: 36rem; }
+.track {
+  position: relative;
+  height: 44px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--wash);
+  overflow: hidden;
+}
+.block {
+  position: absolute;
+  top: 7px;
+  height: 30px;
+  border-radius: var(--radius-mark);
+}
+.block.focus { background: color-mix(in srgb, var(--success) 55%, transparent); }
+.block.rest { background: color-mix(in srgb, var(--muted) 28%, transparent); }
+.midnight {
+  position: absolute;
+  top: 0; bottom: 0;
+  border-left: 1px dashed var(--muted);
+}
+.moment { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--ink); }
+.flags { position: relative; height: 3rem; }
+.flag {
+  position: absolute;
+  bottom: 0.4rem;
+  transform: translateX(-100%);
+  padding-right: 0.5rem;
+  text-align: right;
+  white-space: nowrap;
+  font-size: var(--caption);
+  line-height: 1rem;
+  color: var(--muted);
+}
+.flag .strong { color: var(--ink); display: block; }
+.flag::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: -0.4rem;
+  height: 0.4rem;
+  border-left: 1px solid var(--muted);
+}
+.ticks { position: relative; height: 2.5rem; margin-top: 0.5rem; font-size: var(--caption); line-height: 1rem; color: var(--muted); }
+.tick { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+.tick.lead { transform: none; }
+.tick.trail { transform: translateX(-100%); }
+.tick .strong { color: var(--ink); display: block; }
+
+/* ── Cards ──────────────────────────────────────────────────────────────── */
+
+.cards {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1px;
+  margin-top: 2.5rem;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  overflow: hidden;
+}
+@media (min-width: 46rem) { .cards { grid-template-columns: 1fr 1fr; } }
+.card { background: var(--paper); padding: 1.5rem; }
+.card p { margin: 0; font-size: var(--body); line-height: 1.375rem; color: var(--muted); }
+.card .route {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--caption);
+  color: var(--muted);
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+.facts { list-style: none; margin: 2rem 0 0; padding: 0; max-width: 40rem; }
+.facts li {
+  padding: 1rem 0;
+  border-top: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: 11rem 1fr;
+  gap: 1rem;
+  font-size: var(--body);
+  line-height: 1.375rem;
+}
+.facts li:last-child { border-bottom: 1px solid var(--line); }
+.facts .k { font-weight: 500; }
+.facts .v { color: var(--muted); }
+@media (max-width: 34rem) {
+  .facts li { grid-template-columns: 1fr; gap: 0.25rem; }
+}
+
+/* ── Heatmap ────────────────────────────────────────────────────────────── */
+
+.heatmap { margin-top: 2rem; overflow-x: auto; padding-bottom: 0.5rem; }
+.grid { display: flex; gap: 3px; width: max-content; }
+.week { display: flex; flex-direction: column; gap: 3px; }
+.cell {
+  width: 11px; height: 11px;
+  border-radius: var(--radius-mark);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+}
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 1rem;
+  font-size: var(--note);
+  color: var(--muted);
+}
+.legend span { display: inline-flex; align-items: center; gap: 0.4rem; }
+.legend .cell { box-shadow: inset 0 0 0 1px var(--hairline); }
+
+/* ── Closing ────────────────────────────────────────────────────────────── */
+
+.closing { text-align: center; padding: 5rem 0 4rem; }
+.closing h2 { margin-left: auto; margin-right: auto; max-width: 18ch; }
+.closing .lede { margin-left: auto; margin-right: auto; max-width: 42ch; }
+.closing .actions { justify-content: center; }
+
+footer {
+  border-top: 1px solid var(--line);
+  padding: 2rem 0 3rem;
+  font-size: var(--note);
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+  justify-content: space-between;
+}
+footer a { text-decoration: none; border-bottom: 1px solid var(--line); }
+footer a:hover { color: var(--ink); }
+
+.two {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  gap: 2.5rem;
+  margin-top: 2.5rem;
+}
+.two h3 { margin-bottom: 0.5rem; }
+.two p { color: var(--muted); font-size: var(--body); line-height: 1.375rem; margin: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="masthead">
+    <a class="mark" href="#top"><span class="diamond" aria-hidden="true"></span> Doer</a>
+    <nav>
+      <a href="#rule">The rule</a>
+      <a href="#day">The day</a>
+      <a href="#screens">The screens</a>
+      <a class="repo" href="https://github.com/amansharma2910/doer">GitHub</a>
+    </nav>
+  </header>
+</div>
+
+<main id="top">
+
+  <div class="wrap">
+    <section class="hero">
+      <div class="col">
+        <p class="eyebrow">Open source daily planner</p>
+        <h1>Four tasks. No fifth.</h1>
+        <p class="lede">
+          Doer is built on one rule. Pick <strong>at most four tasks</strong> that count
+          toward the day, and the day is kept if you finish <strong>at least 75% of
+          them</strong>. Four tasks means three, three means three, two means both.
+          Everything else in the application exists to protect that rule.
+        </p>
+        <div class="actions">
+          <a class="btn btn-solid" href="https://github.com/amansharma2910/doer">
+            <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0a8 8 0 0 0-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48l-.01 2.19c0 .21.15.46.55.38A8 8 0 0 0 8 0Z"/></svg>
+            Star the repo
+          </a>
+          <a class="btn btn-ghost" href="#rule">How it works</a>
+        </div>
+        <p class="note">
+          Self-hosted. It runs as a Docker Compose stack wherever you put it, on
+          your own machine or your own server, against your own Postgres. Clone
+          it and the README takes you from there.
+        </p>
+      </div>
+    </section>
+  </div>
+
+  <div class="wrap">
+    <section id="rule">
+      <div class="col">
+        <p class="eyebrow">Today</p>
+        <h2>The commitment is the headline.</h2>
+        <p class="sub">
+          Four slots, and what you have already taken. The time figures underneath are
+          how Doer checks those four against reality, so they are the supporting statement
+          rather than the point.
+        </p>
+      </div>
+
+      <div class="screen" style="margin-top:2.5rem">
+        <div class="screen-head">
+          <span class="date">Today</span>
+          <span class="risk-dot" title="More committed than this day realistically holds"></span>
+        </div>
+        <div class="slot-row">
+          <ul class="slots" aria-label="3 of 4 commitments taken">
+            <li class="filled"></li><li class="filled"></li><li class="filled"></li><li class="empty"></li>
+          </ul>
+          <span class="note">3 of 4 taken</span>
+        </div>
+        <p class="capacity">
+          <span class="num">6h 30m</span> of the <span class="num">5h 15m</span> that fits
+        </p>
+
+        <p class="group-label">Deep work</p>
+        <ul class="rows">
+          <li class="row">
+            <span class="check"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m3.5 8.5 3 3 6-7"/></svg></span>
+            <span class="title">Draft the migration plan</span>
+            <span class="est">2h 30m</span>
+          </li>
+          <li class="row">
+            <span class="check"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m3.5 8.5 3 3 6-7"/></svg></span>
+            <span class="title">Review the capacity service</span>
+            <span class="est running">running 41m</span>
+          </li>
+          <li class="row">
+            <span class="check"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m3.5 8.5 3 3 6-7"/></svg></span>
+            <span class="title">Write the onboarding email</span>
+            <span class="est">45m</span>
+          </li>
+        </ul>
+
+        <p class="group-label">Done</p>
+        <ul class="rows">
+          <li class="row complete">
+            <span class="check done"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m3.5 8.5 3 3 6-7"/></svg></span>
+            <span class="title">Close the week's invoices</span>
+            <span class="est">1h 15m</span>
+          </li>
+        </ul>
+      </div>
+
+      <ul class="facts">
+        <li><span class="k">The cap</span><span class="v">Four primary tasks per day. The fifth is refused, with a remedy attached: demote an existing primary, or add this one as non-primary.</span></li>
+        <li><span class="k">The verdict</span><span class="v">Seventy five percent of the primaries completed keeps the day, so four tasks means three, three means three, and two means both. Two of four does not pass.</span></li>
+        <li><span class="k">The neutral floor</span><span class="v">Fewer than two primaries leaves the day unscoreable. A one-task day is not a win and it is not a loss, so it is neither.</span></li>
+        <li><span class="k">Carry forward</span><span class="v">Unfinished work rolls to the next day and keeps its slot. Tasks you had pre-assigned there give way, because a commitment outranks an intention.</span></li>
+        <li><span class="k">Permanence</span><span class="v">A completed task cannot be edited or deleted. Deletion is refused twice, once by the service and once by a database trigger that also closes the cascade and bulk paths a service check cannot reach. Completions can be reversed, but only before the day closes.</span></li>
+      </ul>
+    </section>
+  </div>
+
+  <div class="wrap">
+    <section id="day">
+      <div class="col">
+        <p class="eyebrow">The logical day</p>
+        <h2>Your day is not the calendar's day.</h2>
+        <p class="sub">
+          You say when it starts and how long it runs. A day from 14:00 to 05:00 is one day,
+          so a task finished at 03:00 counts toward the day that began yesterday afternoon,
+          not toward tomorrow.
+        </p>
+      </div>
+
+      <div class="daybar">
+        <div class="flags">
+          <span class="flag" style="left:86.7%"><span class="strong">03:00</span>task done, counted here</span>
+        </div>
+        <div class="track" role="img" aria-label="A day running from 14:00 to 05:00, with a deep work block in the evening, crossing midnight at 66 percent of its length, and a task completed at 03:00 still inside it.">
+          <span class="block focus" style="left:20%; width:26.7%"></span>
+          <span class="block rest" style="left:46.7%; width:13.3%"></span>
+          <span class="block focus" style="left:73.3%; width:20%"></span>
+          <span class="midnight" style="left:66.7%"></span>
+          <span class="moment" style="left:86.7%"></span>
+        </div>
+        <div class="ticks">
+          <span class="tick lead" style="left:0"><span class="strong">14:00</span>day starts</span>
+          <span class="tick" style="left:66.7%"><span class="strong">00:00</span>midnight</span>
+          <span class="tick trail" style="left:100%"><span class="strong">05:00</span>day ends</span>
+        </div>
+      </div>
+
+      <div class="two col" style="max-width:none">
+        <div>
+          <h3>Frozen at open</h3>
+          <p>
+            A day's shape is stored, not derived. Change your hours tomorrow and
+            yesterday keeps the shape it was measured against. A day that has been
+            scored cannot be rewritten after the fact.
+          </p>
+        </div>
+        <div>
+          <h3>Real hours, not nominal ones</h3>
+          <p>
+            A fifteen hour day across a spring forward transition is fourteen real
+            hours, and the capacity figures follow, because you genuinely have one
+            hour less.
+          </p>
+        </div>
+        <div>
+          <h3>Closing is lazy</h3>
+          <p>
+            Nothing closes your day on a timer. The next time you open the app it closes every
+            elapsed day in order, scores them, and carries the unfinished work
+            forward. Shut it for a week and it is still correct.
+          </p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="wrap">
+    <section id="risk">
+      <div class="col">
+        <p class="eyebrow">Over-commitment</p>
+        <h2>Shown, not shouted.</h2>
+        <p class="sub">
+          Doer estimates how long each task takes, sums the open ones, and compares that
+          against the time you actually have: your focus blocks, minus the busy time on
+          your calendar, times a ratio that defaults to half. Go over, and a small orange
+          dot appears next to the date.
+        </p>
+        <p class="sub tight">
+          That is the entire warning. No modal, no notification, no streak to protect,
+          no red banner telling you that you are behind.
+        </p>
+      </div>
+
+      <div class="two col" style="max-width:none">
+        <div>
+          <h3>It clears itself</h3>
+          <p>
+            The dot tracks the live figure, so finishing work makes it go away. The
+            latched version of the flag is kept separately, for the metrics, so that
+            a day which was over-committed all morning does not record itself as fine.
+          </p>
+        </div>
+        <div>
+          <h3>Unknown never reads as headroom</h3>
+          <p>
+            No focus blocks defined, or a task Doer has not estimated yet, makes the
+            day indeterminate rather than safe. It says it does not know, instead of
+            implying you have room.
+          </p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="wrap">
+    <section id="screens">
+      <div class="col">
+        <p class="eyebrow">The surface</p>
+        <h2>Three screens and a detail view.</h2>
+        <p class="sub">
+          One navigation bar, no settings maze, no dashboard of widgets.
+        </p>
+      </div>
+
+      <div class="cards">
+        <div class="card">
+          <h3><span class="route">/today</span>Today</h3>
+          <p>
+            The four-slot header, your tasks grouped by block, completed work below.
+            Add by typing a task, or by telling the assistant what your day looks like.
+            Reorder by dragging.
+          </p>
+        </div>
+        <div class="card">
+          <h3><span class="route">/history</span>History</h3>
+          <p>
+            Current streak, days kept, and a rolling seven day rate, over a heatmap
+            of the last six months. Two views: how much you finished, and whether the
+            day was kept.
+          </p>
+        </div>
+        <div class="card">
+          <h3><span class="route">/history/:anchor</span>Day detail</h3>
+          <p>
+            Any cell opens the day behind it: the outcome it was given, and the tasks
+            it was given it for.
+          </p>
+        </div>
+        <div class="card">
+          <h3><span class="route">/settings</span>Settings</h3>
+          <p>
+            The day's shape and your focus blocks, edited by dragging directly on a
+            timeline. Drag the window to move it, drag an edge to resize, or tab to it
+            and use the arrow keys. It cannot produce an overlap.
+          </p>
+        </div>
+      </div>
+
+      <div class="heatmap">
+        <div class="grid" role="img" aria-label="Twenty six weeks of days, coloured green where the day was kept, red where it was not, orange where it was over-committed, and left blank where the day was not scored.">
+          <div class="week">
+            <span class="cell"></span>
+            <span class="cell"></span>
+            <span class="cell"></span>
+            <span class="cell"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell"></span>
+            <span class="cell"></span>
+          </div>
+          <div class="week">
+            <span class="cell"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell"></span>
+            <span class="cell"></span>
+          </div>
+          <div class="week">
+            <span class="cell" style="background:var(--risk-mark)"></span>
+            <span class="cell"></span>
+            <span class="cell"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell"></span>
+            <span class="cell"></span>
+          </div>
+          <div class="week">
+            <span class="cell"></span>
+            <span class="cell" style="background:var(--failure)"></span>
+            <span class="cell"></span>
+            <span class="cell"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell"></span>
+          </div>
+          <div class="week">
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell"></span>
+            <span class="cell"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--risk-mark)"></span>
+            <span class="cell"></span>
+            <span class="cell"></span>
+          </div>
+          <div class="week">
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell"></span>
+            <span class="cell"></span>
+            <span class="cell"></span>
+            <span class="cell"></span>
+          </div>
+          <div class="week">
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell"></span>
+            <span class="cell"></span>
+            <span class="cell"></span>
+          </div>
+          <div class="week">
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--failure)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--failure)"></span>
+            <span class="cell"></span>
+            <span class="cell"></span>
+            <span class="cell"></span>
+          </div>
+          <div class="week">
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell"></span>
+            <span class="cell"></span>
+            <span class="cell"></span>
+            <span class="cell"></span>
+          </div>
+          <div class="week">
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell"></span>
+            <span class="cell"></span>
+            <span class="cell" style="background:var(--success)"></span>
+          </div>
+          <div class="week">
+            <span class="cell" style="background:var(--risk-mark)"></span>
+            <span class="cell" style="background:var(--risk-mark)"></span>
+            <span class="cell" style="background:var(--failure)"></span>
+            <span class="cell"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell"></span>
+          </div>
+          <div class="week">
+            <span class="cell"></span>
+            <span class="cell" style="background:var(--failure)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell"></span>
+            <span class="cell"></span>
+          </div>
+          <div class="week">
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell"></span>
+            <span class="cell" style="background:var(--risk-mark)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+          </div>
+          <div class="week">
+            <span class="cell"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--failure)"></span>
+            <span class="cell"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell"></span>
+            <span class="cell" style="background:var(--risk-mark)"></span>
+          </div>
+          <div class="week">
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--risk-mark)"></span>
+            <span class="cell"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--risk-mark)"></span>
+            <span class="cell"></span>
+          </div>
+          <div class="week">
+            <span class="cell"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--failure)"></span>
+            <span class="cell"></span>
+            <span class="cell"></span>
+          </div>
+          <div class="week">
+            <span class="cell"></span>
+            <span class="cell"></span>
+            <span class="cell" style="background:var(--risk-mark)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell"></span>
+            <span class="cell"></span>
+            <span class="cell"></span>
+          </div>
+          <div class="week">
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--risk-mark)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--risk-mark)"></span>
+            <span class="cell" style="background:var(--failure)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+          </div>
+          <div class="week">
+            <span class="cell" style="background:var(--failure)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--risk-mark)"></span>
+            <span class="cell" style="background:var(--failure)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell"></span>
+            <span class="cell"></span>
+          </div>
+          <div class="week">
+            <span class="cell" style="background:var(--failure)"></span>
+            <span class="cell"></span>
+            <span class="cell" style="background:var(--risk-mark)"></span>
+            <span class="cell" style="background:var(--failure)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell"></span>
+          </div>
+          <div class="week">
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--failure)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell"></span>
+            <span class="cell"></span>
+          </div>
+          <div class="week">
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--failure)"></span>
+            <span class="cell"></span>
+            <span class="cell"></span>
+          </div>
+          <div class="week">
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--risk-mark)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell"></span>
+          </div>
+          <div class="week">
+            <span class="cell" style="background:var(--risk-mark)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell"></span>
+          </div>
+          <div class="week">
+            <span class="cell" style="background:var(--risk-mark)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell"></span>
+            <span class="cell"></span>
+          </div>
+          <div class="week">
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell" style="background:var(--success)"></span>
+            <span class="cell"></span>
+            <span class="cell"></span>
+            <span class="cell"></span>
+          </div>
+        </div>
+      </div>
+      <div class="legend">
+        <span><span class="cell" style="background:var(--success)"></span> kept</span>
+        <span><span class="cell" style="background:var(--failure)"></span> not kept</span>
+        <span><span class="cell" style="background:var(--risk-mark)"></span> over-committed</span>
+        <span><span class="cell"></span> not scored</span>
+      </div>
+    </section>
+  </div>
+
+  <div class="wrap">
+    <section id="assistant">
+      <div class="col">
+        <p class="eyebrow">The assistant</p>
+        <h2>It proposes. You commit.</h2>
+        <p class="sub">
+          Tell it what your day looks like in a sentence and it returns a proposal:
+          tasks, blocks, estimates. Nothing is written until you confirm it, and you
+          can edit it first. It does not decompose your work into subtasks, it does not
+          reorganise your day behind your back, and it never adds a fifth primary.
+        </p>
+        <p class="sub tight">
+          Estimation runs separately on a smaller model, in fifteen minute buckets,
+          retried in the background when it fails and cached so the same task is not
+          priced twice. Both run on your own Anthropic API key.
+        </p>
+      </div>
+    </section>
+  </div>
+
+  <div class="wrap">
+    <section class="closing">
+      <h2>Four tasks is a small promise.</h2>
+      <p class="lede">
+        Keeping it most days is not. Star the repo if the idea is worth trying,
+        and clone it if you want to run it tonight. The README has the setup.
+      </p>
+      <div class="actions">
+        <a class="btn btn-solid" href="https://github.com/amansharma2910/doer">
+          <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0a8 8 0 0 0-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48l-.01 2.19c0 .21.15.46.55.38A8 8 0 0 0 8 0Z"/></svg>
+          github.com/amansharma2910/doer
+        </a>
+      </div>
+    </section>
+  </div>
+
+</main>
+
+<div class="wrap">
+  <footer>
+    <span>Doer. FastAPI, Postgres and a Vite SPA, self-hosted on your own infrastructure.</span>
+    <span>
+      <a href="https://github.com/amansharma2910/doer">Source</a> ·
+      <a href="https://github.com/amansharma2910/doer#readme">README</a>
+    </span>
+  </footer>
+</div>
+
+</body>
+</html>
