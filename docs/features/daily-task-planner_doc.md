@@ -20,8 +20,13 @@ afternoon.
 
 Doer estimates each task in 15-minute buckets, sums the open primaries, and
 compares that against the time you actually have (focus blocks minus calendar busy
-time, times a configurable ratio). Over the line, the day turns orange. That is the
-entire warning.
+time, times a configurable ratio). Over the line, a small orange dot appears
+beside the date on Today and the day's heatmap cell takes the same orange. That
+is the entire warning. The dot is `RiskDot` in
+`frontend/src/components/DayHeader.tsx`, gated on `day.is_at_risk`; the cell
+colour is `frontend/src/lib/heatmap.ts`. Both draw the `risk-mark` token rather
+than `risk`, which is the same signal in its text role and reads brown on light
+paper.
 
 ## 2. Implementation Detail
 

@@ -13,7 +13,9 @@ Two things make it different from a task list:
   counts toward the day that began yesterday afternoon, not toward tomorrow.
 - **Over-commitment is shown, not shouted.** Doer estimates how long each task
   takes and compares the total against the time you actually have. Too much, and
-  the day turns orange. That is the entire warning: no modal, no notification.
+  a small orange dot appears beside the date, and the day's cell in the history
+  heatmap turns the same orange. That is the entire warning: no modal, no
+  notification.
 
 Google Calendar is read for availability only, through the `freebusy` scope.
 Event titles never reach the server.
@@ -91,9 +93,29 @@ would omit exactly those.
 
 A FastAPI service and a Vite SPA, with Postgres. In development they run as
 compose services, alongside an hourly database dump; a profile-gated `tests`
-service runs the suite against its own database. A second Docker target builds the single container in which
-FastAPI serves the built SPA; it is kept working from the first milestone so that
-deploying later is configuration rather than a rewrite.
+service runs the suite against its own database. A second Docker target builds
+the single container in which FastAPI serves the built SPA; it is kept working
+from the first milestone so that deploying later is configuration rather than a
+rewrite.
+
+The SPA is three screens behind a persistent navbar. **Today** holds the day in
+progress: the four commitment slots, the task list, and one dock for adding a
+task directly or asking Doer to propose one. A task can be started, and its row
+then shows how long it has been running. **History** opens on the kept rate over
+the last 7 days, the current streak, and the number of days kept, with the
+heatmap beneath them. Every cell links to that day at `/history/:anchor`, which
+gives the verdict, what was committed against what actually fitted, and each
+task's estimate beside what it took. **Settings** is where the shape of the day
+is defined, by dragging the block window along the day timeline.
+
+The navbar is a top bar on a wide screen and a bottom tab bar below 640px. Only
+one of the two is rendered, rather than one being hidden with CSS, because a
+hidden navigation is still in the accessibility tree.
+
+Every colour, type step, spacing step, radius and shadow comes from a single
+`@theme` block in `frontend/src/index.css`, which the dark scheme overrides
+wholesale. A component reaching past those tokens for a raw value is a bug, and
+a test asserts it. See `docs/adr/0003-platform-primitives-and-phased-delivery.md`.
 
 Deployment is deliberately deferred. See `docs/adr/0001-local-first-fastapi-monolith.md`
 for why, and what changes when it happens.
