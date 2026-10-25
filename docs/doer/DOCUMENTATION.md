@@ -1,6 +1,7 @@
 # Doer: Project Documentation
 
-Last updated 2026-10-24, after a full documentation sweep that reconciled every
+Last updated 2026-10-24, after a product website was added at `site/index.html`.
+Earlier the same day, after a full documentation sweep that reconciled every
 document in `docs/` plus `README.md` against the code. Earlier the same day,
 after the fix for a repeat sign-in showing the Google account picker twice.
 Before that, 2026-10-23, after the interface overhaul (all four delivery
@@ -98,6 +99,17 @@ reads, and described itself as complete. All five are now present. Because
 `Settings` is configured `extra="ignore"`, a misspelled variable is still dropped
 silently rather than rejected.
 
+11. **`site/index.html` duplicates the design tokens with nothing enforcing the
+    copy.** The product website hard-codes the colour, radius, shadow and type
+    values from `frontend/src/index.css` so the two surfaces match. Every value
+    agrees today, verified pair by pair. Nothing keeps them agreeing:
+    `tokens.test.ts` imports `../index.css?raw` and has no reach outside
+    `frontend/`, and `tsconfig.json` includes only `src`, so the page is covered
+    by no lint, no type check, no test and no build. The values carrying contrast
+    obligations are the ones to watch, since `muted` owes 4.5:1 and `risk-mark`
+    owes 3:1 and a copy that drifts fails silently on a public page. Changing a
+    token means changing it twice.
+
 Closed on 2026-10-21: carry-forward demotions are now surfaced in the task list;
 a frontend test suite exists; and migrations run on container start.
 
@@ -139,27 +151,39 @@ doer/
 │       ├── api/            auth, days, tasks, settings, assistant, deps
 │       └── services/       day, task, close, capacity, calendar, estimation,
 │                           assistant, metrics, google_oauth, token_store, llm
-└── frontend/src/
-    ├── main.tsx            ReactDOM root, and the only place the global query
-    │                       defaults live: retry 1, refetchOnWindowFocus true
-    ├── index.css           the design token layer: every colour, type step,
-    │                       spacing step, radius and shadow, in both schemes
-    ├── App.tsx             auth gate and router: offline, loading, sign-in,
-    │                       outage; exports AppRoutes separately so a test can
-    │                       mount the tree in a MemoryRouter
-    ├── lib/                api client, typed hooks, wire types; daytime.ts holds
-    │                       day/offset arithmetic, clock parsing and formatting,
-    │                       timeline placement geometry and anchor-date display;
-    │                       stats.ts (history figures), heatmap.ts (cell colour),
-    │                       elapsed.ts (time since a start), useMediaQuery.ts
-    ├── pages/              SignIn, Today, History, DayDetail, Settings
-    └── components/         AppShell (frame, breakpoint), Nav (both navigations),
-                            DayHeader (four-slot contract), TaskList (dnd-kit
-                            reorder, icon controls, in-progress), TaskEntry (the
-                            two entry paths), AddTask, Chat, Heatmap, DayTimeline
-                            (drag and resize), ClockInput (24-hour time entry),
-                            states (loading, empty, error), icons (hand-drawn)
+├── frontend/src/
+│   ├── main.tsx            ReactDOM root, and the only place the global query
+│   │                       defaults live: retry 1, refetchOnWindowFocus true
+│   ├── index.css           the design token layer: every colour, type step,
+│   │                       spacing step, radius and shadow, in both schemes
+│   ├── App.tsx             auth gate and router: offline, loading, sign-in,
+│   │                       outage; exports AppRoutes separately so a test can
+│   │                       mount the tree in a MemoryRouter
+│   ├── lib/                api client, typed hooks, wire types; daytime.ts holds
+│   │                       day/offset arithmetic, clock parsing and formatting,
+│   │                       timeline placement geometry and anchor-date display;
+│   │                       stats.ts (history figures), heatmap.ts (cell colour),
+│   │                       elapsed.ts (time since a start), useMediaQuery.ts
+│   ├── pages/              SignIn, Today, History, DayDetail, Settings
+│   └── components/         AppShell (frame, breakpoint), Nav (both navigations),
+│                           DayHeader (four-slot contract), TaskList (dnd-kit
+│                           reorder, icon controls, in-progress), TaskEntry (the
+│                           two entry paths), AddTask, Chat, Heatmap, DayTimeline
+│                           (drag and resize), ClockInput (24-hour time entry),
+│                           states (loading, empty, error), icons (hand-drawn)
+└── site/
+    └── index.html          the product website: one static file, no build, no
+                            network request, hosted anywhere. Not part of the
+                            application and in no image layer
 ```
+
+**`site/` is not the application.** It is a marketing page that happens to live
+in the repository, and nothing builds, serves or tests it. `Dockerfile` copies
+`backend/` and `frontend/` by name and never selects it, `docker-compose.yml`
+mounts neither, and the `runtime` stage serves `/web/dist` from the Vite build.
+Note that there are now two files called `index.html` with unrelated roles:
+`frontend/index.html` is the Vite entry point, `site/index.html` is the website.
+See `docs/features/product-website_doc.md`.
 
 Two unrelated drag surfaces, worth not confusing. Task reordering uses
 `@dnd-kit`; the settings timeline uses native pointer capture against a custom

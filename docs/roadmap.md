@@ -1,7 +1,7 @@
 ---
 type: roadmap
 created: 2026-10-20
-updated: 2026-10-24
+updated: 2026-10-25
 ---
 
 # Roadmap
@@ -52,6 +52,13 @@ reporting, push-based calendar sync, and any background worker or Redis.
 - [ ] provisional-day-signal: Live on-track or behind state for the day in progress in the history heatmap, additive to the persisted verdict (plan: v1, status: draft)
 - [x] timeline-window-drag: Drag and resize the dashed preference block window directly on the day timeline, snapping to wall-clock half hours and to block edges, magnetically kept clear of existing blocks (plan: v1, status: approved)
 - [x] interface-overhaul: Restructure the web interface into Today, History and Settings behind a persistent navbar, rebuilt on an explicit design token layer, adding task start, day detail and history statistics (plan: v1, status: approved)
+
+**product-website is deliberately not a row here.** It was built on 2026-10-24
+with no plan, so it has no version and no status from the lifecycle enum, and a
+row reading `(plan: none, status: unplanned)` would not parse under the format
+CLAUDE.md fixes for the future Linear sync. Inventing a `v1` that no file backs
+would be worse. It is carried in full under Unplanned Work instead, which is the
+section for work that skipped planning rather than drifted from it.
 
 timeline-window-drag is ticked as of 2026-10-23: both manual gates pass, the
 changelog carries an entry, and the plan reads `approved`. It is **not** `shipped`,
@@ -174,8 +181,39 @@ applied and verified on 2026-10-24 before the roadmap was next written.
 
 ## Unplanned Work
 
-None. No plan or fix plan carries `unplanned: true`, which is what this section
-tracks.
+**product-website, built 2026-10-24, revised 2026-10-25.** A product marketing
+page at `site/index.html`: one self-contained static file with no build step, no
+script and no network request, written to send a reader to the GitHub repository
+to star and clone it. It carries the application's design tokens as literals so
+the page and the app read as one object.
+
+The revision removed three sections at the user's instruction: calendar and
+privacy, the quickstart, and the account of what the project is not. The first
+two duplicated `README.md` and `docs/`, and the third was not wanted on a product
+page. The page now runs the rule, the logical day, the over-commitment signal,
+the screens and the assistant, and points at the README for setup rather than
+printing it.
+
+The same pass corrected the hosting framing. The first draft was written as
+though no hosted version could exist, reading ADR 0001's deferral as a property
+of the software. It is a decision about this project's own hosting: Doer is
+self-hostable, and the page now says so. That distinction is worth holding, since
+the earlier wording appeared in this document too and is corrected here with it.
+
+interview-mode was recommended once and declined in favour of building directly,
+so no plan exists and none was retrofitted. The consequence is that the audience
+and messaging decisions behind the copy are recorded nowhere, and a rewrite would
+restart from scratch. `docs/features/product-website_doc.md` records what was
+built; it does not record why those choices were made.
+
+No frontmatter carries `unplanned: true`, because no plan file exists to carry
+it. This entry is the only record, which is the gap in the convention worth
+knowing: the field tracks planned work that drifted, not work that skipped
+planning entirely.
+
+Three follow-ups it created, all listed in Next Up: the repository is still
+private so every call to action is dead, the token copy has no test behind it,
+and the page restates product constants that cannot notice when they move.
 
 Two exclusions worth stating, so the empty list is not read as a claim that
 nothing happened. Defect work is tracked under Fixes above, not here. And by
@@ -335,14 +373,20 @@ architecture-mode (ADR 0003), qa-mode, four implementation phases each gated on
 lint, tests and build, then documentation-mode and this pass. What remains for
 this feature is listed as items 16 to 19 below.
 
-The numbered list below is the standing backlog and is unchanged.
+**Five items were added by the product website**, numbered 27 to 31. Items 30
+and 31 arrived with the 2026-10-25 revision. Item 27 is a blocker on the page
+being useful at all, and item 30 is the same blocker grown sharper.
+
+The numbered list below is the standing backlog and is otherwise unchanged.
 
 1. **Use it.** Nothing further is needed to start recording days. The validation
    question is behavioral and cannot be answered by more building.
 2. **Create the GCP project** when calendar-aware capacity is wanted; the app works
    without it, degraded to raw focus-block capacity. See `docs/setup/gcp_setup.md`.
-3. **Nine Drift Notes stand** in `docs/doer/DOCUMENTATION.md`, up from six on
-   2026-10-24. Carried over: `actual_minutes` covers only explicitly started
+3. **Eleven Drift Notes stand** in `docs/doer/DOCUMENTATION.md`, up from six
+   earlier on 2026-10-24. Note 11 arrived with the product website and is item 27
+   below. The count in this item read "nine" when the sweep wrote it while the
+   document already held ten; both are now reconciled against the file. Carried over: `actual_minutes` covers only explicitly started
    tasks; a user row cannot be deleted once it has events; calendar busy time is
    un-subtracted by any task mutation until the next stale sync (the denominator
    there is now twelve call sites, not eleven); a pre-rewrite clone still holds
@@ -578,3 +622,44 @@ The numbered list below is the standing backlog and is unchanged.
    to forbid arbitrary-value sizes would close Drift Note 9 and retire the five
    remaining literals, and would make AC-IO-07 true as written rather than true
    of colour only. Small, and it is the test that would have caught all of this.
+27. **Make the repository public, or the website has no destination.** Seven links
+    on `site/index.html` point at `github.com/amansharma2910/doer`, which returned
+    404 to an anonymous request on 2026-10-24. Star and clone are the page's only
+    two calls to action and both are dead until this changes. It is one setting,
+    and it blocks everything the page is for. Drift Note 1 of
+    `docs/features/product-website_doc.md`.
+28. **Nothing enforces the website's copy of the design tokens.** Every colour,
+    radius, shadow and type value in `site/index.html` is a literal taken from
+    `frontend/src/index.css`, and all of them agree today, checked pair by pair.
+    `tokens.test.ts` reads `../index.css?raw` and cannot see outside `frontend/`,
+    `tsconfig.json` includes only `src`, and no script touches the file, so a
+    token changed in one place and not the other fails nothing. `muted` owes
+    4.5:1 and `risk-mark` owes 3:1, so the failure mode is a public page quietly
+    below AA. The cheap version is a test that greps both files for the same
+    literals; the thorough version is generating the page's `:root` block from
+    `index.css`. Drift Note 11.
+29. **The website restates product constants in prose.** Four of them as of
+    2026-10-25: the four-slot cap, the 75% verdict, the two-primary floor and the
+    four route paths, sourced from `backend/doer/models/task.py` and
+    `frontend/src/App.tsx`. The port numbers were a fifth until the quickstart
+    was removed, which severed the page's only coupling to `docker-compose.yml`.
+    The first draft already got the headline rule wrong, stating it as "at least
+    three", which is one point on the curve and the exact wording item 11 removed
+    from `README.md`. It was caught by `doc-crawler` before anything was
+    committed, which is the argument for keeping that crawl in the loop whenever
+    the page changes.
+30. **Removing the quickstart sharpened item 27 rather than shrinking it.** The
+    page now carries no setup instructions and points at the README three times
+    instead, across five links to a repository that is private. A reader who
+    cannot reach it can no longer learn anything about running the project from
+    the page. Making the repository public closes both items; nothing else does.
+31. **Two claims on the website lost their disclosure.** The over-commitment
+    section still figures capacity "minus the busy time on your calendar" and the
+    assistant section still says both models run on your own Anthropic key. Each
+    implies a third-party data flow, and the section stating what is actually
+    read and sent went with the removals. Nothing on the page is false; what is
+    gone is the context that made those sentences safe to read, and the page no
+    longer mentions Google OAuth at all, so a reader cannot learn that sign-in
+    needs a Google client or that the calendar is optional. A single line in the
+    privacy register would close it without restoring a section. Drift Note 5 of
+    `docs/features/product-website_doc.md`.
