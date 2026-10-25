@@ -1,6 +1,14 @@
 # Interface Overhaul
 
-Last updated 2026-10-23, on completion of all four delivery phases.
+Last updated 2026-10-24, on a documentation sweep. Before that, 2026-10-23, on
+completion of all four delivery phases.
+
+Two things landed after the phase gates and are described in place below: the
+third bottom-band token, and the fix for a preference block edit leaving the
+Settings list and the day timeline showing a day shape that no longer existed
+(`docs/fixes/fix_plan_block-edits-leave-stale-ui.md`, verified 2026-10-24). The
+latter added `frontend/src/__tests__/settings_blocks.test.tsx`, the fourteenth
+test file.
 
 ## Drift Notes
 
@@ -20,13 +28,24 @@ Last updated 2026-10-23, on completion of all four delivery phases.
 4. **`lib/elapsed.ts` has no direct test.** It is exercised through `TaskList`
    in `today.test.tsx`, but its timestamp normalisation (the branch that
    appends `Z` to a naive UTC string) is covered only incidentally.
+5. **The token tests check declaration, not adoption, for everything that is not
+   a colour.** `--shadow-raised` and `--spacing-field` are declared in `@theme`
+   and asserted to exist, yet no component consumes either. Nothing would fail if
+   a token were declared and never used, or if a new hard-coded size appeared.
+   Added 2026-10-24, alongside the correction to section 2.
 
 ## 1. What the feature does
 
-It restructures the web interface from two pages into three screens behind a
-persistent navigation bar, rebuilds the visual layer on an explicit design
-token system, and reaches three capabilities the backend already supported and
-the interface never called.
+It restructures the web interface from two pages into **three navigation
+sections** behind a persistent navigation bar, rebuilds the visual layer on an
+explicit design token system, and reaches three capabilities the backend already
+supported and the interface never called.
+
+"Three screens" is the shorthand used throughout these documents and it is worth
+stating exactly. There are three navigation sections (Today, History, Settings),
+four routed paths plus two redirects, and five components that render as a whole
+screen: the four in the table below plus `SignIn`, which renders outside the
+router entirely and so has no route and no shell.
 
 | Screen | Route | Holds |
 |---|---|---|
@@ -46,10 +65,18 @@ approach, and why no runtime dependency was added, is in
 
 `frontend/src/index.css` is the single source for every colour, size, radius,
 shadow and spacing step. Components consume generated utilities (`text-muted`,
-`bg-raised`, `pb-dock`); none holds a literal. `tokens.test.ts` enforces that by
-grepping the source tree for the arbitrary-value forms that were there before:
-`[var(--color-*)]` appeared 57 times, `black/[0.0*]` and `white/[0.0*]` at eight
-sites across four opacities.
+`bg-raised`, `pb-dock`). `tokens.test.ts` enforces that by grepping the source
+tree for the arbitrary-value forms that were there before: `[var(--color-*)]`
+appeared 57 times, `black/[0.0*]` and `white/[0.0*]` at eight sites across four
+opacities.
+
+**Corrected 2026-10-24.** This section used to say "none holds a literal", and
+that is true of colour only. The four forbidden patterns are all colour patterns
+(`[var(--color-`, `black/[0.`, `white/[0.`, `bg-[color-mix(`), and five
+arbitrary-value **sizes** survive in components: `max-w-[12ch]` in `Nav`,
+`h-[7px] w-[7px]` in `DayHeader`, and `gap-[3px]` twice plus `h-[11px] w-[11px]`
+in `Heatmap`. AC-IO-07 is worded as the stronger claim and the roadmap records
+the mismatch. The colour half is enforced and holds.
 
 It is a plain `@theme` block, **not `@theme inline`**. The distinction is
 load-bearing and was verified against Tailwind 4.3.3 rather than assumed: plain
@@ -186,10 +213,21 @@ and `View` moved from `components/Heatmap.tsx` to `lib/heatmap.ts`.
   fails `tokens.test.ts` if it drops below its contrast obligation, which is the
   point.
 - **The test environment is node by default.** `vite.config.ts` pins it, and the
-  four DOM test files opt in with a `// @vitest-environment jsdom` docblock. The
+  five DOM test files (`today`, `navigation`, `history`, `polish`,
+  `settings_blocks`) opt in with a `// @vitest-environment jsdom` docblock.
+  `clock_input.test.tsx` and `day_timeline.test.tsx` are not among them: both
+  render through `react-dom/server` and assert markup only. The
   158 pre-existing cases keep the footing they were written against; 146 of them
   are byte-identical after this work, the only edited one being
   `heatmap.test.ts`, by three lines.
+- **The suite, measured 2026-10-24: 324 tests across 14 files, all passing.**
+  `daytime.test.ts` 114, `tokens.test.ts` 50, `today.test.tsx` 29, `polish.test.tsx`
+  18, `navigation.test.tsx` 17, `stats.test.ts` 17, `anchor_date.test.ts` 15,
+  `history.test.tsx` 13, `heatmap.test.ts` 12, `clock_input.test.tsx` 11,
+  `day_timeline.test.tsx` 10, `hooks.test.ts` 7, `settings_blocks.test.tsx` 7,
+  `api.test.ts` 4. This replaces the "316 across 13" figure carried by documents
+  written on 2026-10-23, which predated `settings_blocks.test.tsx` and counted
+  the Today and anchor-date files four and two cases high respectively.
 - **`css: true` in the test config is load-bearing.** Vitest stubs CSS imports
   to an empty string by default, including `?raw` ones, which would make
   `tokens.test.ts` pass by vacuity against an empty file.

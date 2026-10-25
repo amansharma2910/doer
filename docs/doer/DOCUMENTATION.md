@@ -1,10 +1,12 @@
 # Doer: Project Documentation
 
-Last updated 2026-10-24, after the fix for a repeat sign-in showing the Google
-account picker twice. Before that, 2026-10-23, after the interface overhaul (all
-four delivery phases); earlier the same day, after the timeline-window-drag
-feature and the 24-hour clock field fix. Before that,
-2026-10-21, after milestones M1 to M7 and the pnpm store history rewrite.
+Last updated 2026-10-24, after a full documentation sweep that reconciled every
+document in `docs/` plus `README.md` against the code. Earlier the same day,
+after the fix for a repeat sign-in showing the Google account picker twice.
+Before that, 2026-10-23, after the interface overhaul (all four delivery
+phases); earlier the same day, after the timeline-window-drag feature and the
+24-hour clock field fix. Before that, 2026-10-21, after milestones M1 to M7 and
+the pnpm store history rewrite.
 
 ## Drift Notes
 
@@ -21,7 +23,7 @@ Known gaps between what the documents promise and what the code does.
    needs a deliberate carve-out before Doer has anyone else on it. Removing a test
    user currently requires disabling the trigger for the statement.
 
-3. **Calendar busy time is un-subtracted by any task mutation.** Nine of the eleven
+3. **Calendar busy time is un-subtracted by any task mutation.** Nine of the twelve
    `recompute_capacity` call sites pass no `busy`, so `capacity.compute` subtracts
    zero and `busy_minutes_subtracted` is wiped. `calendar.sync_day` only re-applies
    it when the snapshot is stale, so a calendar-connected user's threshold reads
@@ -54,6 +56,48 @@ Known gaps between what the documents promise and what the code does.
    `/auth/google/login?force_consent=true` by hand. See
    `docs/fixes/fix_plan_repeat-signin-shows-account-picker-twice.md`.
 
+7. **`POST /tasks` accepts an `anchor_date` it silently ignores.**
+   `TaskCreate.anchor_date` is declared in `schemas/task.py` and therefore appears
+   in the published OpenAPI schema, but the handler never reads it: the day always
+   comes from `_resolve_day`. A client posting it to backdate a task gets a 201 and
+   the task lands on today. Either the field is wired up or it is removed; leaving a
+   documented parameter that does nothing is the worst of the three. Found
+   2026-10-24, needs its own fix plan.
+
+8. **The production-parity image calls an absolute `localhost:8787`.**
+   `lib/api.ts` falls back to `http://localhost:8787` when `VITE_API_BASE` is
+   unset, and the `web-build` stage of the Dockerfile sets no such variable.
+   `VITE_API_BASE` appears only on the compose `web` service and is absent from
+   `.env.example`. Since `main.py` serves the built SPA same-origin under
+   `SERVE_STATIC=1`, the runtime bundle would call a different origin than the one
+   it is served from. The runtime image is built and smoke-tested at every
+   milestone, so this has not bitten yet, but it makes the deferred deployment
+   slightly more than configuration. Found 2026-10-24, needs its own fix plan.
+
+9. **"No component holds a literal" is not true, and the test does not enforce
+   it.** Five sites still carry arbitrary-value sizes: `max-w-[12ch]` in `Nav`,
+   `h-[7px] w-[7px]` in `DayHeader`, and `gap-[3px]` twice plus `h-[11px] w-[11px]`
+   in `Heatmap`. `tokens.test.ts` forbids four patterns, all of them colour
+   (`[var(--color-`, `black/[0.`, `white/[0.`, `bg-[color-mix(`), and none of them
+   a size. The colour half of the claim is enforced and true. Separately,
+   `--shadow-raised` and `--spacing-field` are declared and asserted but consumed
+   by no component, because the token tests check declaration rather than adoption
+   for everything that is not a colour. This is the same failure mode the overhaul
+   recorded against its own test titles.
+
+10. **Calendar freshness has no TTL, and one route skips close.**
+   `calendar.is_stale` returns true only when the snapshot predates `day.start_at`,
+   so after the first successful sync of a day nothing re-syncs automatically; only
+   `POST /days/current/refresh-calendar` will. That same route does not call
+   `close_elapsed_days` first, unlike `GET /days/current`, so it can materialize
+   today while yesterday sits unclosed. Both are plausibly intended; neither is
+   written down anywhere. Found 2026-10-24.
+
+Closed on 2026-10-24: `.env.example` omitted five settings that `config.py`
+reads, and described itself as complete. All five are now present. Because
+`Settings` is configured `extra="ignore"`, a misspelled variable is still dropped
+silently rather than rejected.
+
 Closed on 2026-10-21: carry-forward demotions are now surfaced in the task list;
 a frontend test suite exists; and migrations run on container start.
 
@@ -68,7 +112,8 @@ test harness; ADR 0003 withdrew the deferral on the condition ADR 0002 set for
 itself, and a harness now exists. The timeline gestures are still uncovered, but
 that is now an unfinished job rather than a decision: the harness arrived with
 the interface overhaul and was pointed at routing, the day header, the task
-rows and the history screens.
+rows, the history screens and, since 2026-10-24, settings block editing. The
+same change of status applies to the `ClockInput` keystroke gap behind Flow 17.
 
 ## 1. Project Structure
 
@@ -95,6 +140,8 @@ doer/
 │       └── services/       day, task, close, capacity, calendar, estimation,
 │                           assistant, metrics, google_oauth, token_store, llm
 └── frontend/src/
+    ├── main.tsx            ReactDOM root, and the only place the global query
+    │                       defaults live: retry 1, refetchOnWindowFocus true
     ├── index.css           the design token layer: every colour, type step,
     │                       spacing step, radius and shadow, in both schemes
     ├── App.tsx             auth gate and router: offline, loading, sign-in,
@@ -147,6 +194,12 @@ used to produce them was never recorded.
 | anthropic | >=0.40.0 | `AsyncAnthropic.messages.parse` structured output |
 | structlog | >=24.4.0 | Logging on the paths that deliberately swallow exceptions |
 
+`pyproject.toml` declares floors and `uv.lock` pins 52 packages, but **neither
+Docker target installs from the lockfile**: `Dockerfile:15` and `Dockerfile:34`
+both run `uv pip install --system --no-cache -r pyproject.toml`, which re-resolves
+from the floors at build time. The locked versions therefore describe `uv run` on
+a host, not what the images contain. Two builds a month apart can differ.
+
 Google's own client libraries are deliberately absent. Three OAuth endpoints and
 one FreeBusy call are clearer as direct `httpx` calls than as library machinery,
 and the library would not have made the scope limits any more visible.
@@ -157,15 +210,25 @@ and the library would not have made the scope limits any more visible.
 calls), `ruff >=0.7.0`.
 
 Anthropic is not mocked with respx. It is replaced with a scripted double, because
-what needs testing is our handling of the response, not the SDK's transport.
+what needs testing is our handling of the response, not the SDK's transport. There
+is a mechanical reason as well, found on 2026-10-24: `anthropic` resolves to 1.16.0,
+which depends on `httpx2` rather than `httpx`. respx patches `httpx`, so it
+structurally cannot intercept Anthropic traffic. The image carries two independent
+HTTP client stacks for this reason.
 
 ### Frontend
 
 Runtime: `react`, `react-dom`, `react-router-dom`, `@tanstack/react-query`,
-`@dnd-kit/{core,sortable,utilities}`.
-Dev: `typescript`, `vite`, `@vitejs/plugin-react`, `tailwindcss` + `@tailwindcss/vite`,
-React type packages, and as of 2026-10-23 `jsdom`, `@testing-library/react` and
-`@testing-library/user-event`.
+`@dnd-kit/{core,sortable,utilities}`. All three `@dnd-kit` packages are used in
+exactly one file, `components/TaskList.tsx`.
+Dev: `typescript`, `vite`, `vitest`, `@vitejs/plugin-react`, `tailwindcss` +
+`@tailwindcss/vite`, React type packages, and as of 2026-10-23 `jsdom`,
+`@testing-library/react` and `@testing-library/user-event`.
+
+Nothing in either manifest is unimported, and nothing imported is missing from a
+manifest. On the backend `uvicorn`, `asyncpg` and `alembic` are imported by no
+source file and are all required anyway: the first two are a command and a driver
+loaded through the URL, the third is a CLI.
 
 **The runtime manifest is still unchanged**, which is the property the
 no-new-dependency posture actually protects. Earlier documents say
@@ -177,7 +240,8 @@ expressible without one.
 
 Tailwind v4 has no config file; the theme lives in `src/index.css` under
 `@theme`, and since the interface overhaul that block is the single source for
-every colour, size, radius and shadow in the application. It is plain `@theme`,
+every colour in the application. For sizes the claim is weaker than earlier
+documents state: see Drift Note 9. It is plain `@theme`,
 **never `@theme inline`**: plain `@theme` emits utilities that reference the
 custom property, so the dark-scheme `:root` override reaches them at run time,
 where `@theme inline` resolves the value at build time and would break it.
@@ -190,27 +254,36 @@ Pinned toolchain: `postgres:17`, `python:3.13-slim`, `node:23-slim`, `uv 0.9.5`,
 
 Most depended-upon first:
 
-| Module | Depended on by |
-|---|---|
-| `doer.models` | every service, every router, alembic, every test |
-| `doer.daytime` | day, close, task, calendar, estimation, assistant, token_store, deps, days router |
-| `doer.events` | task, day, close, calendar, token_store, estimation, assistant, auth |
-| `doer.config` | db, crypto, main, four services, two routers, alembic env |
-| `doer.db` | all five routers, estimation (its own session for detached work) |
-| `services.task_service` | close, calendar, tasks router, assistant router, settings router |
-| `services.capacity` | day_service, task_service, calendar |
-| `api.deps` | all five routers |
-| `services.google_oauth` | auth router, token_store |
-| `services.token_store` | calendar, days router |
+Derived from the import graph on 2026-10-24, over `backend/doer` and
+`backend/alembic`. Five rows of the previous version of this table were wrong and
+are corrected here.
+
+| Module | Count | Depended on by |
+|---|---|---|
+| `doer.models` | 13 | all five routers, `api.deps`, and services `assistant`, `calendar`, `close_service`, `day_service`, `estimation`, `metrics`, `task_service`, `token_store`. Also alembic and every test |
+| `doer.config` | 12 | `alembic.env`, `api.auth`, `api.deps`, `api.tasks`, `crypto`, `db`, `main`, and services `assistant`, `estimation`, `google_oauth`, `llm`, `metrics` |
+| `doer.daytime` | 11 | `api.days`, `api.deps`, and services `assistant`, `calendar`, `capacity`, `close_service`, `day_service`, `estimation`, `google_oauth`, `task_service`, `token_store` |
+| `doer.events` | 8 | `api.auth`, and services `assistant`, `calendar`, `close_service`, `day_service`, `estimation`, `task_service`, `token_store` |
+| `doer.db` | 7 | all five routers, `api.deps`, `services.estimation` (its own session for detached work) |
+| `services.task_service` | 6 | `api.assistant_routes`, `api.settings_routes`, `api.tasks`, and services `calendar`, `close_service`, `estimation` |
+| `api.deps` | 5 | all five routers |
+| `services.day_service` | 4 | `api.days`, `api.settings_routes`, `api.tasks`, `services.close_service` |
+| `services.calendar` | 3 | `api.days`, `api.settings_routes`, `api.tasks` |
+| `services.close_service` | 3 | `api.days`, `api.tasks`, `services.metrics` (deferred import) |
+| `services.capacity` | 3 | `services.calendar`, `services.day_service`, `services.task_service` |
+| `services.llm` | 3 | `api.assistant_routes`, `services.assistant`, `services.estimation` |
+| `doer.crypto`, `services.google_oauth` | 2 each | `api.auth`, `services.token_store` |
+| `services.token_store` | 1 | `services.calendar` only |
+| `services.metrics` | 1 | `services.close_service` only |
 
 Frontend, most depended-upon first:
 
 | Module | Depended on by |
 |---|---|
 | `lib/types` | every page, every component that renders data, hooks, api |
-| `lib/hooks` | App, Nav, Today, History, DayDetail, Settings, TaskList, AddTask, Chat, Heatmap |
+| `lib/hooks` | App, Nav, Today, History, DayDetail, Settings, TaskList, AddTask, Chat, Heatmap, DayHeader |
 | `lib/api` | App, Today, DayDetail, Settings, TaskList, AddTask, hooks |
-| `lib/daytime` | Settings, DayHeader, DayDetail, DayTimeline, ClockInput |
+| `lib/daytime` | Settings, DayHeader, DayDetail, DayTimeline, ClockInput, `lib/stats` (the only lib-to-lib edge besides hooks to api to types) |
 | `components/states` | App, Today, History, DayDetail, Settings |
 | `components/icons` | TaskList, TaskEntry |
 | `lib/stats` | History |
@@ -249,8 +322,10 @@ overhaul it invalidates by bare prefix (`["tasks"]`, `["day"]`), so a mutation
 on Today also refreshes an open `/history/:anchor` view.
 
 No component imports another page, and no `lib/` module imports a component.
-The one exception is `components/Heatmap.tsx`, which now imports `Link`: its
-cells are routes, so it can no longer be rendered outside a router.
+
+**Four components cannot be rendered outside a router**, not one as this document
+previously said: `AppShell` (`Outlet`), `Nav` (`NavLink`), `DayHeader` (`Link`)
+and `Heatmap` (`Link`). This is why the DOM tests wrap in a `MemoryRouter`.
 
 **A third cache rule, and the easiest of the three to break silently.**
 `useDay` decides whether to poll by reading the *tasks* cache by key, so the two
@@ -259,6 +334,29 @@ segment for the day-detail screen, a lookup left on the old flat key would have
 returned `undefined` and the day would have quietly stopped following the
 estimate cadence, with nothing failing and no test noticing. Both sides change
 together; `history.test.tsx` now covers the coupling.
+
+**Invalidation is not uniform, and the narrative above describes only the common
+case.** There are four distinct refresh behaviours, which is the thing most likely
+to mislead a reader of this section:
+
+- **`useTaskMutation`**, used by every task mutation, invalidates the bare
+  prefixes `["tasks"]`, `["day"]` and `["heatmap"]` on `onSettled`.
+- **Preference block add and remove do not go through `lib/hooks.ts` at all.**
+  They are `useMutation` calls inside `BlocksEditor` that call `api()` directly
+  and hand-invalidate through their own `refreshAfterBlockChange`. This mirrors a
+  server-side effect, since the backend recomputes the open day's capacity on
+  every block write, and nothing in the type system connects the two.
+- **`useRefreshCalendar` invalidates the exact tuple `keys.day`**, not the prefix,
+  so its reach is narrower than every other mutation's.
+- **`DayShapeForm.save` invalidates only `keys.me`, and on `onSuccess` rather than
+  `onSettled`**, so it is the one mutation that does not reconcile after a
+  failure. That is defensible given the screen says changes apply from the next
+  day, but it is a deliberate exception rather than the pattern.
+
+`Settings.tsx` is therefore a second data-access pattern living alongside the
+hooks: three of its mutations bypass them. ADR 0003 flagged this and asked for it
+to be resolved or deliberately kept during phase 4; it was neither, and the
+block-edit fix extended it. See roadmap correction 9(c).
 
 Two cache rules that are load-bearing and easy to get wrong:
 
@@ -350,15 +448,17 @@ uv run pytest -m live     # 7 more that call the real model and cost money
 ```
 
 ```bash
-cd frontend && pnpm test  # 316 tests across 13 files. Pre-existing: day/offset
-                          # arithmetic, clock stepping and timeline placement
-                          # (114), heatmap rules (12), clock field markup (11),
-                          # timeline markup (10), sign-out teardown (7), error
-                          # decoding (4). Added by the interface overhaul:
-                          # design tokens and contrast (50), the Today screen
-                          # (33), routing and the auth gates (17), history and
-                          # day detail (13), settings and polish (18), history
-                          # statistics (17), anchor-date display (17).
+cd frontend && pnpm test  # 324 tests across 14 files, measured 2026-10-24.
+                          # Pre-existing: day/offset arithmetic, clock stepping
+                          # and timeline placement (114), heatmap rules (12),
+                          # clock field markup (11), timeline markup (10),
+                          # sign-out teardown (7), error decoding (4). Added by
+                          # the interface overhaul: design tokens and contrast
+                          # (50), the Today screen (29), routing and the auth
+                          # gates (17), history statistics (17), settings and
+                          # polish (18), anchor-date display (15), history and
+                          # day detail (13). Added by the block-edit fix:
+                          # settings block editing (7).
 ```
 
 The suite drops and re-migrates the schema of the database it is pointed at, so
@@ -447,3 +547,52 @@ sign-in.
 runs inline, and an in-process sweeper retries what is due. The sweep logic sits
 behind one callable that is also an HTTP endpoint, so a scheduler can drive it on a
 host that scales to zero.
+
+## 6. Data Model and API Surface
+
+Added 2026-10-24. Neither contract was described anywhere in this document, and
+they are the two most exposed to drift.
+
+### The nine tables
+
+Column lists live in `backend/doer/models/`; this is the map, not the schema.
+
+| Table | Holds | The part that is a contract |
+|---|---|---|
+| `users` | Identity and the day-shape preferences: timezone, start time, duration, capacity ratio | Checks on duration (60 to 1440) and ratio |
+| `auth_sessions` | Opaque sessions. 32 bytes of `token_urlsafe`, stored as a SHA-256 hex digest | `token_hash` unique. The raw cookie value is never stored |
+| `oauth_tokens` | The Google grant, Fernet-encrypted | One row per user (`user_id` unique). `status` is `active` or `revoked`. `refresh_token_encrypted` is created as empty bytes before a grant is first stored, which is one of the three conditions meaning "nothing usable" |
+| `preference_blocks` | Focus and rest blocks, as minute offsets from day start rather than clock times | Checks on kind, non-negative start, and start before end |
+| `logical_days` | The spine. One materialized row per user per anchor date, with the day shape frozen at open | `UNIQUE (user_id, anchor_date)`, which is what makes lazy close idempotent under concurrency. `duration_minutes` is real elapsed time, so it differs from the configured duration on a DST day |
+| `tasks` | The work, its estimate, its estimation state machine, and its carry-forward history | `CHECK estimate_minutes % 15 = 0`. A trigger refuses deletion of any row with `completed_at` set, including via cascade. The four-primary cap is deliberately **not** a constraint, because carry-forward must demote within the same transaction |
+| `events` | The append-only analytics log, 31 event names | A trigger refuses UPDATE and DELETE. TRUNCATE still works, which is how tests clean up. `logical_day_id` is `SET NULL`, not cascade |
+| `estimate_cache` | Model estimates keyed on a normalized title | `UNIQUE (user_id, normalized_title)`, so the cache is per user and never global |
+| `daily_metrics` | One aggregate row per closed day, including token counts and a cost rollup | `UNIQUE (user_id, anchor_date)` |
+
+`logical_days` declares no ORM relationship to `users` or `tasks`. Every join to
+it is written explicitly.
+
+Migrations are a linear Alembic chain of six, ending at `5093a6d0e446`. Two of
+them install the triggers above, which is the whole reason the test suite
+migrates rather than calling `create_all`.
+
+### The route surface
+
+24 routes across five routers (auth 4, settings 4, days 4, tasks 9, assistant 3),
+plus two registered on the app itself: `GET /health`, and the SPA catch-all that
+exists only when `SERVE_STATIC=1` and is excluded from the schema. 26 in total. The per-route table, with status codes and
+refusal semantics, is in `docs/features/daily-task-planner_doc.md` §4 and is not
+duplicated here.
+
+Three facts about it that belong with the structure rather than the feature:
+
+- **Route order in `api/days.py` is load-bearing.** `/heatmap` and `/current` are
+  registered before `/{anchor}`, so the literal paths win over date parsing.
+- **Five response models are declared outside `doer/schemas/`**: `HeatmapCell` and
+  `HeatmapGrid` in `api/days.py`, the three chat models in `api/assistant_routes.py`,
+  and `ProposedTask`/`Proposal` in `services/assistant.py`. Two endpoints,
+  `GET /auth/me` and `PATCH /settings/day-shape`, return a bare `dict` and so carry
+  no typed schema in the OpenAPI document at all.
+- **There is no update endpoint for a preference block**, only create and delete.
+  `_reject_overlap` carries a `skip_id` parameter that no caller passes, which is
+  the residue of an update path that was never built.

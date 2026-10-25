@@ -181,7 +181,7 @@ If the refresh token is missing on the *first* consent, see gotcha 2 below.
 
 7. **Publishing status and scope changes can take a few minutes to propagate.** If a change does not seem to apply, wait before debugging code.
 
-8. **`freebusy.query` has no sync token.** It is a point-in-time query over a time range, not an incremental feed. This is intentional: Doer queries the current logical day's window on demand at day open and on explicit refresh. If you find yourself reaching for `events.list` to get incremental sync, re-read ADR 0001 first, because that would mean requesting a scope that grants full event content for a feature that only needs availability.
+8. **`freebusy.query` has no sync token.** It is a point-in-time query over a time range, not an incremental feed. This is intentional: Doer queries the current logical day's window on demand. **Corrected 2026-10-24:** that query fires on a *stale read* and on explicit refresh, not at day open. `day_service.open_day` makes no network call. A snapshot counts as stale only when it predates the day's start, so after the first successful sync of a day nothing re-syncs automatically and only `POST /days/current/refresh-calendar` will. ADR 0001 already recorded the first half of this correction; this guide contradicted it until now. If you find yourself reaching for `events.list` to get incremental sync, re-read ADR 0001 first, because that would mean requesting a scope that grants full event content for a feature that only needs availability.
 
 ## 9. What changes when Doer is deployed (v2)
 

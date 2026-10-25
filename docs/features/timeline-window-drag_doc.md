@@ -40,6 +40,13 @@ cannot: turn pixels into minutes. This is the house pattern, not a new one, and 
 is what makes the behaviour testable at all, since the Vitest suite runs in the
 default node environment with no DOM (ADR 0002 declined to add one).
 
+**Amended 2026-10-24.** A DOM harness does exist now. ADR 0003 withdrew ADR 0002's
+deferral on the condition ADR 0002 had set for itself, and jsdom arrived with the
+interface overhaul on 2026-10-23. The default test environment is still node and
+the pure-function split above is unchanged and still the right shape; what changed
+is that the gestures could now be covered and are not. See the last bullet of this
+document.
+
 ### The candidate model
 
 For a day starting at `dayStart` and running `dayDurationMinutes`:
@@ -233,6 +240,13 @@ impossible, and the existing error handler still surfaces it.
 - `day_timeline.test.tsx` renders with `react-dom/server`, not a DOM harness. It
   asserts markup facts only and never behaviour. `react-dom` is an existing
   runtime dependency, so this added nothing to install.
-- The pointer gestures themselves have no automated coverage, by decision. Flow 16
-  of `docs/user_testing_documentation.md` is the gate, and a failed step there
-  blocks exactly as a failed test does.
+- The pointer gestures themselves have no automated coverage. Flow 16 of
+  `docs/user_testing_documentation.md` is the gate, and a failed step there blocks
+  exactly as a failed test does.
+
+  **This stopped being a decision on 2026-10-23 and is now an unfinished job.**
+  ADR 0002 declined a DOM harness, which is why the gap was principled at the
+  time. ADR 0003 added one, and pointed it at routing, the day header, the task
+  rows and the history screens. Nobody has pointed it at these gestures. The
+  geometry beneath them stays covered exhaustively as pure functions, so what is
+  uncovered is the roughly 60 lines of pointer wiring, not the placement rules.

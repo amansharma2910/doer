@@ -303,6 +303,15 @@ Flows 1 to 17 above still apply. Several describe the old two-page layout and na
 control is revealed by hovering a task row, that is exactly what Flow 21 checks has
 changed.
 
+Two older steps name controls that no longer exist, and the substitution is not
+obvious from the word "dashboard" alone. **Flow 3.1** says "click the plus
+button" and **Flow 4.1** says the chat "is collapsed by default". Both entry
+paths now live together in the docked entry surface at the foot of Today,
+labelled **Add a task** and **Ask Doer**. Read those two steps as opening the
+matching tab of that surface. The thing each step is actually checking, that the
+add form asks for no duration and that chat does not dominate the screen, is
+unchanged and still worth confirming.
+
 ### Flow 18: Navigation and the three screens **[P1]**
 
 | Step | Action | Expected result |

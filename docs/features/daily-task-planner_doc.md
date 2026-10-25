@@ -3,6 +3,11 @@
 The whole of Doer v1. Plan `implementation_plan_daily-task-planner_1.md`,
 ADR 0001, tracking plan `daily-task-planner_tracking_plan.md`.
 
+Last updated 2026-10-24. The interface this feature was built against was
+replaced on 2026-10-23: the surfaces now live in
+`docs/features/interface-overhaul_doc.md`, and the backend described here is
+unchanged by it apart from the `anchor` parameter noted in section 4.
+
 ## 1. What It Does
 
 You commit to at most four primary tasks for a day. The day is scored a success if
@@ -139,7 +144,8 @@ edit share is how prompt drift first appears.
 | Aggregates, cost, replay | `backend/doer/services/metrics.py` |
 | The one event writer | `backend/doer/events.py` |
 | Triggers | `backend/alembic/versions/*_initial_schema.py`, `*_tasks.py` |
-| Heatmap rendering rules | `frontend/src/components/Heatmap.tsx` |
+| Heatmap cell colour rules | `frontend/src/lib/heatmap.ts` (`colorFor`, `View`) |
+| Heatmap grid markup, the two views | `frontend/src/components/Heatmap.tsx` |
 | Heatmap grid dates | `backend/doer/daytime.py` (`local_date`, `grid_days`) |
 | Drag reorder (tasks, dnd-kit) | `frontend/src/components/TaskList.tsx` |
 | Drag and resize (settings timeline, native pointer) | `frontend/src/components/DayTimeline.tsx`, `frontend/src/lib/daytime.ts`, and `docs/features/timeline-window-drag_doc.md` |
@@ -147,7 +153,10 @@ edit share is how prompt drift first appears.
 ## 4. Interfaces and Contracts
 
 All routes except `/health` and the auth entry points require the `doer_session`
-cookie and return **401** without it.
+cookie and return **401** without it, with one exception worth naming:
+`POST /auth/logout` carries no auth dependency at all, so it succeeds with no
+cookie. That is deliberate (sign-out is idempotent) but it is not what the
+sentence above would lead you to expect.
 
 | Method | Path | Notes |
 |---|---|---|
@@ -162,9 +171,9 @@ cookie and return **401** without it.
 | POST | `/days/current/refresh-calendar` | Calendar failures degrade, never surface |
 | GET | `/days/heatmap?weeks=` | The grid dates and the cells for both views |
 | GET | `/days/{anchor}` | |
-| GET POST | `/tasks` | **409** `primary_cap_reached` on the fifth primary |
+| GET POST | `/tasks` | **409** `primary_cap_reached` on the fifth primary. GET takes an optional `anchor` (ISO date) to read a past day: it returns that day's tasks, **404**s when no logical day exists on that anchor, and **422**s on a malformed date. The two cases do not share a code path, because the "now" path closes elapsed days, materializes the current one and emits events, all of which are wrong for reading history |
 | PATCH DELETE | `/tasks/{id}` | **409** on a completed task |
-| POST | `/tasks/{id}/start` | Populates `actual_minutes` on completion |
+| POST | `/tasks/{id}/start` | Populates `actual_minutes` on completion. Reachable from the interface since 2026-10-23: every pending row carries a start control, which is what stopped the estimation-error indicator reading over a subset that was empty by construction |
 | POST DELETE | `/tasks/{id}/complete` | DELETE reverses; **409** `day_closed` after close |
 | POST | `/tasks/{id}/primary` | |
 | POST | `/tasks/{id}/reorder` | Scoped within a preference block |
@@ -172,14 +181,23 @@ cookie and return **401** without it.
 | POST | `/assistant/confirm` | Commits the proposal |
 | POST | `/assistant/sweep` | Retries due estimates. Global, not per-user |
 
-**Contract refusals carry a remedy.** The four raised through `rule_error` return a
-`detail` object, not a string:
+**Contract refusals carry a remedy.** The six raised through `rule_error` return a
+`detail` object, not a string. Five are in `api/tasks.py` and one in
+`api/assistant_routes.py`:
 
 ```json
-{"message": "this day already holds 4 primary tasks",
+{"message": "This day already holds 4 primary tasks",
  "code": "primary_cap_reached",
- "remedy": "demote an existing primary, or add this one as non-primary"}
+ "remedy": "Demote an existing primary, or add this one as an extra"}
 ```
+
+That is the literal text `task_service` emits. Earlier versions of this document
+paraphrased it in lower case and said "add this one as non-primary", which is not
+the string a client would match on or a user would read.
+
+Not every 409 takes this shape. `PATCH /tasks/{id}` on a completed task raises a
+plain string detail rather than going through `rule_error`, so a client reading
+`detail.code` finds nothing there.
 
 Codes: `primary_cap_reached`, `completed_immutable`, `day_closed`. The frontend
 reads this through `ApiError.detail`; reading `.message` alone yields only the

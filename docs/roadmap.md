@@ -69,9 +69,11 @@ v1 scope. The implementation is complete.
 interface-overhaul is ticked as of 2026-10-23. All four delivery phases are
 implemented and green: `pnpm lint` clean, 316 frontend tests across 13 files
 (up from 158 across 6), 214 backend tests (up from 208), and a production build
-that succeeds. The plan reads `approved`, ADR 0003 is accepted, plan §12 carries
-27 acceptance criteria and 44 test definitions, and `docs/features/interface-overhaul_doc.md`
-describes the result.
+that succeeds. Those counts are as measured on 2026-10-23; the suite now stands
+at 324 across 14 files and 220 backend tests, re-measured 2026-10-24. The plan
+reads `approved`, ADR 0003 is accepted, plan §12 carries 27 acceptance criteria
+and 44 test definitions, and `docs/features/interface-overhaul_doc.md` describes
+the result.
 
 It is **not** `shipped`, for the same reason timeline-window-drag is not:
 nothing is deployed anywhere, ADR 0001 defers hosting to v2, and release-mode
@@ -217,6 +219,86 @@ Recorded here because each changed a commitment made in an earlier document.
    The README is corrected; the ADR is left as written, since ADRs record the
    decision of their time.
 
+9. **ADR 0003 records four decisions the implementation did not follow.** The ADR
+   is left as written, as ADR 0001 and plan v1 were, because an ADR records the
+   decision of its time; the divergences belong here. (a) §3 specifies a token
+   layer in three tiers, primitives, semantic and component; `index.css` is one
+   flat `@theme` block in which every token is semantic. (b) §3 specifies that
+   `keys.tasks` becomes `["tasks", anchor]`; it did not, and `hooks.ts` keeps
+   `keys.tasks` as `["tasks","current"]` with `keys.tasksAt(anchor)` beside it,
+   which `interface-overhaul_doc.md` §4 describes correctly, so the two documents
+   disagree with each other. (c) §4 flags that `Settings.tsx` has a second
+   data-access pattern and says P4 should resolve it or leave it deliberately,
+   "not discovered"; all four phases are complete, the divergence is unresolved,
+   and the block-edit fix extended the pattern rather than retiring it. (d) §4
+   says `day_timeline.test.tsx` and `clock_input.test.tsx` should be rewritten
+   against the DOM harness; both still run in the node environment against
+   `renderToStaticMarkup`, and `day_timeline.test.tsx` still carries the comment
+   "ADR 0002 declined a DOM test harness", which ADR 0003 withdrew.
+10. **AC-IO-07 is written as a stronger claim than the test enforces.** It reads
+   "No component hard-codes a color, size, radius or shadow". Colour is enforced
+   and holds. Five arbitrary-value sizes remain in `Nav`, `DayHeader` and
+   `Heatmap`, and `tokens.test.ts` forbids four colour patterns and no size
+   pattern. Plan v1 is left as written, being the record of what was planned;
+   `interface-overhaul_doc.md` and `CHANGELOG.md` are corrected.
+11. **Four test IDs defined in the interface-overhaul plan are cited by no test.**
+   T-IO-24 (a drag whose drop target is in another preference group is ignored),
+   T-IO-38 (`colorFor` keeps all 12 assertions after the move: the 12 cases exist
+   in `heatmap.test.ts` but cite `T-HEAT-01` to `04`), and T-IO-43 and T-IO-44,
+   which are defined as the rewritten DOM-harness versions of the two node-env
+   test files and so could not exist while 9(d) stands. The reverse direction is
+   clean: every AC-IO and T-IO cited in code exists in the plan.
+12. **A second test title outruns its assertion.** `polish.test.tsx` still names a
+   block "the bottom band is one token, not four agreeing numbers (D4)" while the
+   block asserts three tokens and the relation between two of them. The
+   documentation was corrected to three tokens on 2026-10-24; the test title was
+   not. This is the same failure mode as the loading-state test recorded above,
+   and it is now a pattern rather than an incident.
+13. **`README.md` stated the scoring rule as "finish at least 3 of them".** The
+   rule is a 75% ratio with a two-primary floor, so three of four is one point on
+   it. Corrected 2026-10-24.
+14. **`docs/features/daily-task-planner_doc.md` understated the refusal surface.**
+   It said four refusals are raised through `rule_error`; there are six. Its
+   example JSON also did not match the string the code emits, differing in case
+   and in the remedy wording, which matters because a client matches on it.
+   Corrected 2026-10-24.
+
+## Documentation sweep, 2026-10-24
+
+A full reconciliation of every document under `docs/`, plus `README.md` and
+`.env.example`, against the code. Run as documentation-mode with two
+`doc-crawler` passes, one per half of the codebase, then this roadmap pass.
+
+**Ownership lines crossed, recorded rather than quietly taken.** documentation-mode
+owns only `docs/doer/DOCUMENTATION.md` and `docs/features/`. The user asked for
+all documents, so four files outside that row were edited for factual content
+only: `README.md` (no owner), `docs/releases/CHANGELOG.md` (release-mode),
+`docs/setup/gcp_setup.md` (no owner), and `docs/user_testing_documentation.md`
+(qa-mode, where the existing blanket amendment was extended rather than any flow
+or gate being rewritten). `.env.example` was also corrected. **No lifecycle state
+was touched by the sweep**: no `status`, no `review_due`, no checkbox recording a
+verification event, and no plan or ADR body.
+
+**Two frontmatter states look wrong and are deliberately left alone.**
+`implementation_plan_interface-overhaul_1.md` reads `approved` while the feature
+is built, and `fix_plan_repeat-signin-shows-account-picker-twice.md` reads
+`applied` rather than `verified`. Both are correct as they stand, for the reasons
+recorded above and at item 20. A sweep must not convert either.
+
+**What the crawlers found that nothing had reported.** Three new defects, now
+Drift Notes 7, 8 and 10 and items 22 to 24 below. Five wrong rows in the backend
+cross-module map, two in the frontend one, and a claim that one component could
+not be rendered outside a router when four cannot. A structure tree missing
+`main.tsx`, which is where the global query defaults live. And the counted
+assertions: twelve `recompute_capacity` call sites rather than eleven, six
+`rule_error` sites rather than four, five DOM test files rather than four, 324
+tests across 14 files rather than 316 across 13.
+
+**What was added rather than corrected.** `docs/doer/DOCUMENTATION.md` gained a
+section 6 describing the nine tables and the shape of the route surface. Neither
+contract was documented anywhere in that file, and they are the two most exposed
+to drift. The per-route table stays in the feature doc and is not duplicated.
+
 ## Verification
 
 Checked on 2026-10-21 rather than asserted:
@@ -226,6 +308,13 @@ Checked on 2026-10-21 rather than asserted:
   plus 74 frontend tests as of 2026-10-21, the last check of the day; 7 live tests
   excluded from the default run. Figures here have been stale twice in one day, so
   treat any count in a document as the date it carries, not as current.
+- Re-measured 2026-10-24: **220 backend tests collected** by default with 7 live
+  deselected, and **324 frontend tests across 14 files**, all passing. The backend
+  figure was counted by collection rather than by running the suite, which is the
+  safe way to count it. The 76 T-* and 21 AC-* of plan v1, and the 44 T-IO-* and
+  27 AC-IO-* of the overhaul plan, were re-counted from the plans themselves and
+  all four figures are as previously recorded. Four T-IO ids are cited by no
+  test: see correction 11.
 - All 31 events in the tracking plan are emitted by the code.
 - The runtime container builds and serves both the SPA and the API.
 
@@ -234,6 +323,10 @@ Checked on 2026-10-21 rather than asserted:
 **One item is active and waiting on the user.** The fix for the double account
 picker is applied and documented, and needs a live sign-out and sign-in to move
 to `verified`. See item 20. Everything else below is the standing backlog.
+
+**Five items were added by the 2026-10-24 documentation sweep**, numbered 22 to
+26. Three are defects nothing had reported, one is the unowned README, and one is
+the test change that would have caught most of what the sweep found by hand.
 
 **interface-overhaul is complete and documented.**
 
@@ -248,10 +341,17 @@ The numbered list below is the standing backlog and is unchanged.
    question is behavioral and cannot be answered by more building.
 2. **Create the GCP project** when calendar-aware capacity is wanted; the app works
    without it, degraded to raw focus-block capacity. See `docs/setup/gcp_setup.md`.
-3. **Three Drift Notes stand** in `docs/doer/DOCUMENTATION.md`: `actual_minutes`
-   covers only explicitly started tasks, so the estimation-error indicator reads
-   over a subset; a user row cannot be deleted once it has events; and calendar
-   busy time is un-subtracted by any task mutation until the next stale sync.
+3. **Nine Drift Notes stand** in `docs/doer/DOCUMENTATION.md`, up from six on
+   2026-10-24. Carried over: `actual_minutes` covers only explicitly started
+   tasks; a user row cannot be deleted once it has events; calendar busy time is
+   un-subtracted by any task mutation until the next stale sync (the denominator
+   there is now twelve call sites, not eleven); a pre-rewrite clone still holds
+   122 MB on disk; there is no `.dockerignore`; and the `calendar_connected`
+   series is not comparable across 2026-10-24. Added by the sweep: `POST /tasks`
+   accepts an `anchor_date` it silently ignores; the runtime image would call an
+   absolute `localhost:8787`; and "no component holds a literal" is true of
+   colour only. One was closed: `.env.example` is now complete against `Settings`.
+   The three new ones are items 22 to 24 below.
 4. **provisional-day-signal, plan v1 is draft.** Architecture-mode next: the two
    open questions that decide the shape are how "substantially elapsed" is defined
    and whether `scheduled_primary` becomes live-when-open in the same change.
@@ -356,16 +456,16 @@ The numbered list below is the standing backlog and is unchanged.
    the version that holds against a malformed URL or a future rewrite of the
    harness. Deferred deliberately in
    `docs/fixes/fix_plan_tests-wipe-production-database.md`.
-8. **Documents doc-crawler flagged that are still wrong**, each owned by a mode
-   that has not run. The `docs/user_testing_documentation.md` migration wording is
-   fixed as of 2026-10-22, verified against `docker-compose.yml:28`. Still open:
-   `docs/releases/CHANGELOG.md` has no `[Unreleased]` entries for the three
-   2026-10-21 fixes or the heatmap endpoint change, which the 2026-10-23
-   release-mode pass did not cover because it was scoped to the two newest changes
-   (release-mode); and `.env.example` line 4 disagrees with
-   `docs/setup/gcp_setup.md` line 130 about the database host, which sends a
-   reader following one of them to a connection failure and the other to
-   production.
+8. **Closed on 2026-10-24 by the documentation sweep.** Both halves of this item
+   are done. The changelog gap was larger than recorded here: not three fixes but
+   all seven that carry a fix plan, plus the heatmap endpoint change, the whole
+   interface overhaul, sign-out, task start and the `anchor` parameter. All are
+   now under `[Unreleased]`. The `.env.example` and `gcp_setup.md` disagreement is
+   settled in favour of `gcp_setup.md`: port 5432 is published and the compose
+   `api` service overrides `DATABASE_URL` in its `environment:` block, which beats
+   `env_file:`, so the value in `.env` is read only by host commands and `db` never
+   resolves for them. `.env.example` now reads `localhost` and says why. See
+   "Documentation sweep, 2026-10-24" below for the ownership lines this crossed.
 9. **Tracking plan wanted for timeline-window-drag.** The feature is built,
    verified and in the changelog, and no event measures it. Block definition is on
    the critical path to the capacity model working at all, and the case for direct
@@ -384,17 +484,17 @@ The numbered list below is the standing backlog and is unchanged.
    install from line 26. The size half is cosmetic; the overlay half is a
    correctness question that no build has been run to settle. Declined as
    out-of-scope in `docs/fixes/fix_plan_pnpm-store-committed-to-history.md`.
-12. **`README.md` does not reach the fix plans or the newer ADR, and no mode owns
-   it.** Its "Where the thinking is written down" table lists six documents and
-   omits `docs/fixes/` entirely, so none of the five fix plans is discoverable
-   from the entry point, and the 2026-10-21 history rewrite is recorded nowhere a
-   reader starting at the README would find it. As of 2026-10-23 the table also
-   omits ADR 0002 and both newer plans, so the ADR index it presents is no longer
-   complete. Its "## Tests" section lists only the backend `pytest` invocations
-   and never mentions `cd frontend && pnpm test`, so a reader following the README
-   alone never runs the 158 frontend tests. The re-clone guidance now lives in
-   `docs/doer/DOCUMENTATION.md`. `README.md` appears in no row of CLAUDE.md's
-   file ownership table, so this needs either a user decision or a new owner.
+12. **Closed on 2026-10-24.** `README.md` appears in no row of CLAUDE.md's file
+   ownership table, so this item was waiting on a user decision. The user asking
+   for all documents to be updated was taken as that decision. The index now
+   reaches every directory under `docs/`, all three ADRs and all four plans; the
+   Tests section names `cd frontend && pnpm test`; and the history-rewrite
+   re-clone guidance has a section of its own rather than living only in
+   `docs/doer/DOCUMENTATION.md`. One further correction was made while there: the
+   opening line stated the rule as "finish at least 3 of them", which is one point
+   on a curve rather than the rule. The code is a 75% ratio with a two-primary
+   floor. **`README.md` still has no owner**, which is the part this item did not
+   close.
 13. **Fix plan wanted for the busy-subtraction wipe.** Nine of the eleven
    `recompute_capacity` call sites pass no `busy`, inflating a calendar-connected
    user's threshold after any task write. Found during the stale-block-snapshot
@@ -403,11 +503,13 @@ The numbered list below is the standing backlog and is unchanged.
    five questions in tracking plan §6 in order, and write the verdict back.
 15. **release-mode** only if and when deployment is wanted. That is a v2 decision,
    and ADR 0001 names Cloud Run plus managed Postgres as the indicated path.
-16. **The interface overhaul has no release checklist and no changelog entry.**
-   `docs/releases/CHANGELOG.md` has no `[Unreleased]` line for it, and its
-   section 28 still describes the surfaces M5 shipped: "Minimal dashboard,
-   collapsible chat". There is no dashboard and the chat is not collapsible.
-   release-mode owns both. This now compounds the gap already recorded at item 8.
+16. **The interface overhaul has no release checklist.** The changelog half of
+   this item was closed on 2026-10-24: the `Surfaces` line no longer describes a
+   dashboard and a collapsible chat, and the overhaul now has `Added` and
+   `Changed` entries. The release checklist is still missing and release-mode
+   still owns it. Note that writing one does not imply shipping: the
+   timeline-window-drag checklist sits at `ready` precisely because there is
+   nowhere to deploy.
 17. **Four manual steps are covered by test but were never run live**, by the
    user's decision on 2026-10-23: the four-primary remedy, the at-risk dot,
    completing a started task, and drag reordering. The assistant path was
@@ -418,11 +520,15 @@ The numbered list below is the standing backlog and is unchanged.
    heatmap a motivator and an analytics window. Found while verifying P3,
    deliberately not built because it is outside plan v1's scope. Needs a
    decision, and interview-mode if the answer is yes.
-19. **Four Drift Notes stand in `docs/features/interface-overhaul_doc.md`**:
-   `vite.config.ts` is outside `tsconfig.json`'s `include` so its new `test`
-   block is not type-checked; `WEEKS = 26` is declared in two files that must
-   agree; the heatmap axis gap at item 18; and `lib/elapsed.ts` has no direct
-   test, so its timestamp normalisation is covered only incidentally.
+19. **Five Drift Notes stand in `docs/features/interface-overhaul_doc.md`**, all
+   four of the originals re-verified against source on 2026-10-24 and still true:
+   `vite.config.ts` is outside `tsconfig.json`'s `include` so its `test` block is
+   not type-checked; `WEEKS = 26` is declared in `History.tsx` and `Heatmap.tsx`
+   and the two must agree; the heatmap axis gap at item 18; and `lib/elapsed.ts`
+   has no direct test. The fifth was added by the sweep: the token tests assert
+   declaration rather than adoption for everything that is not a colour, so
+   `--shadow-raised` and `--spacing-field` are declared, asserted and consumed by
+   nothing, and a newly hard-coded size would fail no test.
 20. **Verify the sign-in fix live.** Sign out, sign back in with a real Google
    account, and confirm one account picker, no consent screen, and a landing
    straight on the app. That is the only outstanding condition in
@@ -438,3 +544,37 @@ The numbered list below is the standing backlog and is unchanged.
    amount. Recorded as Drift Note 6 in `docs/doer/DOCUMENTATION.md`. metrics-mode
    should decide whether the pre-fix window is discarded or annotated before the
    post-launch review reads it.
+22. **Fix plan wanted: `POST /tasks` accepts an `anchor_date` it ignores.**
+   `TaskCreate.anchor_date` is declared in `schemas/task.py` and so appears in the
+   published OpenAPI schema, but the handler never reads it. The day always comes
+   from `_resolve_day`, so a client posting it to backdate a task receives a 201
+   and the task lands on today. Either wire it up or remove it; a documented
+   parameter that silently does nothing is worse than either. Found by
+   `doc-crawler` on 2026-10-24. Drift Note 7.
+23. **Fix plan wanted: the runtime image would call an absolute `localhost:8787`.**
+   `lib/api.ts` falls back to that origin when `VITE_API_BASE` is unset, the
+   `web-build` stage sets no such variable, and `.env.example` does not carry it.
+   Since the runtime container serves the SPA same-origin under `SERVE_STATIC=1`,
+   the parity bundle would call a different origin than the one serving it. M7
+   builds and smoke-tests that image at every milestone, so this has not bitten,
+   but it means the deferred deployment is slightly more than configuration,
+   which is the specific promise ADR 0001 made. Drift Note 8.
+24. **Calendar freshness has no TTL, and one route skips close.**
+   `calendar.is_stale` is true only when the snapshot predates `day.start_at`, so
+   after a day's first successful sync nothing re-syncs automatically and only
+   `POST /days/current/refresh-calendar` will. That route also omits the
+   `close_elapsed_days` call that `GET /days/current` makes, so it can materialize
+   today while yesterday sits unclosed. Both may well be intended; neither is
+   written down, and the first interacts with item 13, since a task write wipes
+   the busy subtraction that nothing will then restore until the next day. Needs a
+   decision before a fix plan. Drift Note 10.
+25. **`README.md` still has no owner.** Item 12's content gap is closed, but the
+   structural question it raised is not: no row of CLAUDE.md's file ownership
+   table names the repository's entry point, so it is updated only when somebody
+   asks for it directly. Worth either adding it to documentation-mode's row or
+   deciding deliberately that it stays unowned.
+26. **Adopt-not-declare for the non-colour tokens.** `tokens.test.ts` forbids four
+   colour patterns and checks that every other token is *declared*. Extending it
+   to forbid arbitrary-value sizes would close Drift Note 9 and retire the five
+   remaining literals, and would make AC-IO-07 true as written rather than true
+   of colour only. Small, and it is the test that would have caught all of this.

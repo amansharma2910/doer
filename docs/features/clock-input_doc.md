@@ -1,5 +1,8 @@
 # The 24-hour clock field
 
+Last updated 2026-10-24, on a documentation sweep. The control itself is
+unchanged since 2026-10-23.
+
 ## What it does
 
 Every time on the Settings page is entered through `ClockInput`: **Starts** under
@@ -107,7 +110,14 @@ legible only as a background colour.
   around. `stepToMultiple` is what gets such a value back onto the grid.
 - The field's keystroke behaviour has no automated coverage. Flow 17 is the gate,
   as Flow 16 is for the timeline drag. The arithmetic beneath it is covered
-  exhaustively as pure functions.
+  exhaustively as pure functions, and `clock_input.test.tsx` covers the markup in
+  11 cases through `react-dom/server`.
+
+  **Amended 2026-10-24.** When this was written there was no DOM harness to use.
+  There is one now: ADR 0003 added jsdom on 2026-10-23 and five test files run
+  under it. The keystroke gap is therefore an unfinished job rather than a
+  constraint, the same change of status recorded for the timeline gestures in
+  `docs/features/timeline-window-drag_doc.md`.
 - Closing the typed route to an odd time removed one of the four routes ADR 0002
   relied on. Three remain, so the magnetic grid-plus-flush rule is unchanged and
   still necessary. ADR 0002 and `timeline-window-drag_doc.md` carry dated
