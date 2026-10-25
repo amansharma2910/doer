@@ -56,19 +56,6 @@ database through the container rather than the host:
 docker compose exec db psql -U doer -d doer
 ```
 
-### If you cloned before 2026-10-21
-
-`main` was rewritten with `git filter-repo` on 2026-10-21 to remove a committed
-122 MB pnpm store, so most commits before that date have new SHAs. Re-clone, or:
-
-```bash
-git fetch origin && git reset --hard origin/main
-```
-
-Do not `git pull`: it will try to merge the old history and bring the removed
-objects back. `docs/doer/DOCUMENTATION.md` has the detail, including the stale
-122 MB that such a clone still has on disk and that nothing will prompt you about.
-
 ## Tests
 
 ```bash
